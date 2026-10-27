@@ -8,7 +8,7 @@ from atlas.schema import Document
 from atlas.store import Store
 from atlas.tasks.guard import redact, valid_identity, valid_luhn
 from atlas.tasks.queue import Queue
-from atlas.tasks.runners import command, run
+from atlas.tasks.runners import command, extract_json, resolve_program, run
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -111,3 +111,63 @@ class RunnerTests(unittest.TestCase):
         doc = next(d for d in self.store.all() if d.id == 'credential-fiction')
         self.assertTrue(doc.meta['sensitive'])
         self.assertEqual(doc.text, '[CREDENTIAL]\nSynthetic garden.')
+
+
+class ResolveTests(unittest.TestCase):
+    def test_python_resolves_absolute(self):
+        import sys
+        argv = resolve_program(['python' if sys.platform == 'win32' else sys.executable, '-V'])
+        self.assertTrue(Path(argv[0]).is_absolute())
+        self.assertEqual(argv[-1], '-V')
+
+    def test_cmd_shim_is_wrapped(self):
+        import os, sys
+        with tempfile.TemporaryDirectory() as d:
+            name = 'atlasfake'
+            shim = Path(d) / (name + ('.cmd' if os.name == 'nt' else ''))
+            shim.write_text('@echo off\necho ok\n' if os.name == 'nt' else '#!/bin/sh\necho ok\n')
+            shim.chmod(0o755)
+            old = os.environ['PATH']
+            os.environ['PATH'] = d + os.pathsep + old
+            try:
+                argv = resolve_program([name, 'x'])
+            finally:
+                os.environ['PATH'] = old
+            if os.name == 'nt':
+                self.assertEqual([argv[-2].lower(), argv[-1]], [str(shim).lower(), 'x'])
+                self.assertIn('/c', argv)
+            else:
+                self.assertEqual(argv, [str(shim), 'x'])
+
+    def test_missing_program(self):
+        with self.assertRaises(FileNotFoundError):
+            resolve_program(['definitely-not-an-atlas-runner', 'x'])
+
+    def test_extract_json_wrappers(self):
+        self.assertEqual(extract_json('{"entities": []}'), {'entities': []})
+        self.assertEqual(extract_json('{"result": "{\\"entities\\": [1]}"}'), {'entities': [1]})
+        self.assertEqual(extract_json('{"structured_output": {"entities": [2]}}'), {'entities': [2]})
+        self.assertEqual(extract_json('note\n{"entities": [3]}\n'), {'entities': [3]})
+
+    def test_codex_prompt_on_stdin(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(d); queue = Queue(d, store)
+            store.upsert([Document('fiction-1', 'synthetic', '2024-01-01', 'Synthetic garden.')])
+            queue.make()
+            argv = run(queue, 'codex', {}, print_cmd=True)[0]
+            self.assertEqual(argv[-1], '-')
+            self.assertFalse(any('INSTRUCTIONS' in a or '\n' in a for a in argv))
+            store.db.close()
+
+    def test_remake_same_content_is_idempotent_and_changed_is_clear(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = Store(d); queue = Queue(d, store)
+            store.upsert([Document('fiction-1', 'synthetic', '2024-01-01', 'Synthetic garden.')])
+            first = queue.make()
+            self.assertEqual(queue.make(), first)
+            self.assertEqual(len(queue.list()), 1)
+            store.upsert([Document('fiction-1', 'synthetic', '2024-01-01', 'Changed garden.')])
+            with self.assertRaises(ValueError) as ctx:
+                queue.make()
+            self.assertIn('fresh ATLAS_DATA_DIR', str(ctx.exception))
+            store.db.close()

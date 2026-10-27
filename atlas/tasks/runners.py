@@ -1,4 +1,6 @@
 """Shell-free runner commands; concurrent processes, serialized queue operations."""
+import os
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,13 +11,37 @@ from .queue import write_json
 TEMPLATES = {
     "codex": ["codex", "exec", "-C", "{task_dir}", "-s", "workspace-write",
               "--skip-git-repo-check", "--ephemeral", "--output-schema",
-              "{task_dir}/output.schema.json", "-o", "{task_dir}/output.json", "{prompt}"],
-    "agy": ["agy", "-p", "{prompt}", "--output-format", "json", "--json-schema",
+              "{task_dir}/output.schema.json", "-o", "{task_dir}/output.json", "-"],
+    "agy": ["agy", "-p", "{prompt_short}", "--output-format", "json", "--json-schema",
             "{task_dir}/output.schema.json", "--mode", "accept-edits", "--add-dir",
             "{task_dir}", "--print-timeout", "600s"],
-    "grok": ["grok", "-p", "{prompt}", "--cwd", "{task_dir}", "--output-format",
+    "grok": ["grok", "--prompt-file", "{prompt_file}", "--cwd", "{task_dir}", "--output-format",
              "json", "--json-schema", "{schema}", "--always-approve"],
 }
+
+# Templates whose full prompt is piped on stdin (avoids Windows argv limits and
+# cmd.exe quoting of multi-line text when the program is a .cmd shim).
+STDIN_PROMPT = {"codex"}
+PROMPT_HEAD = "Read input.json and INSTRUCTIONS.md. Write output.json matching output.schema.json.\n"
+
+
+def resolve_program(argv):
+    """Resolve argv[0] via PATH/PATHEXT (finds npm .cmd shims) and wrap batch files."""
+    program = argv[0]
+    found = shutil.which(program)
+    if not found and os.name == "nt":
+        for suffix in (".cmd", ".exe", ".bat", ".ps1"):
+            found = shutil.which(program + suffix)
+            if found:
+                break
+    if not found:
+        raise FileNotFoundError("runner program not found on PATH: " + os.path.basename(program))
+    lower = found.lower()
+    if lower.endswith((".cmd", ".bat")):
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", found] + list(argv[1:])
+    if lower.endswith(".ps1"):
+        return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", found] + list(argv[1:])
+    return [found] + list(argv[1:])
 
 
 def command(name, path, config):
@@ -25,28 +51,69 @@ def command(name, path, config):
     values = {"task_dir": str(path.resolve()), "python": sys.executable,
               "config_dir": config.get("config_dir", ""),
               "schema": (path / "output.schema.json").read_text(encoding="utf-8"),
-              "prompt": "Read input.json and INSTRUCTIONS.md. Write output.json matching output.schema.json.\n"
-                        + (path / "INSTRUCTIONS.md").read_text(encoding="utf-8")}
+              "prompt": prompt_text(path),
+              "prompt_file": str((path / "PROMPT.md").resolve()),
+              "prompt_short": "Read PROMPT.md in " + str(path.resolve()) + " and follow it exactly."}
     # Replace only known placeholders, leaving literal JSON braces untouched.
     import re
-    return [re.sub(r"\{(task_dir|python|config_dir|schema|prompt)\}",
+    return [re.sub(r"\{(task_dir|python|config_dir|schema|prompt_file|prompt_short|prompt)\}",
                    lambda match: values[match[1]], item) for item in template]
 
 
-def execute(argv, path, stdout_output, timeout):
+def prompt_text(path):
+    return PROMPT_HEAD + (path / "INSTRUCTIONS.md").read_text(encoding="utf-8")
+
+
+def extract_json(text):
+    """Parse agent stdout: raw JSON, a {result: ...} wrapper, or the last JSON object."""
+    import json
+    text = text.strip()
     try:
-        result = subprocess.run(argv, cwd=path, capture_output=True, timeout=timeout, check=False)
+        value = json.loads(text)
+    except ValueError:
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        value = json.loads(text[start:end + 1])
+    for key in ("structured_output", "result", "output", "response"):
+        if isinstance(value, dict) and key in value and not {"entities", "operations", "decisions"} & set(value):
+            inner = value[key]
+            if isinstance(inner, str):
+                try:
+                    return extract_json(inner)
+                except ValueError:
+                    continue
+            if isinstance(inner, dict):
+                return inner
+    return value
+
+
+def execute(argv, path, stdout_output, timeout, stdin_text=None):
+    try:
+        (path / "PROMPT.md").write_text(prompt_text(path), encoding="utf-8")
+        argv = resolve_program(argv)
+        result = subprocess.run(argv, cwd=path, capture_output=True, timeout=timeout, check=False,
+                                input=stdin_text.encode("utf-8") if stdin_text is not None else None,
+                                stdin=None if stdin_text is not None else subprocess.DEVNULL)
+        from .guard import redact
+        # Diagnostics stay in the private task dir, credential-redacted, tail only.
+        (path / "runner.log").write_text(redact(result.stderr.decode("utf-8", "replace")[-4000:]), encoding="utf-8")
         if result.returncode:
             return [f"runner exited with code {result.returncode}"]
         if stdout_output:
             import json
-            write_json(path / "output.json", json.loads(result.stdout))
+            write_json(path / "output.json", extract_json(result.stdout.decode("utf-8", "replace")))
         if not (path / "output.json").is_file():
             return ["runner did not produce output.json"]
         return []
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         # Never persist stdout/stderr or exception messages containing credentials.
         return ["runner failure: " + type(exc).__name__]
+
+
+def _uses_stdin(name, config):
+    override = config.get("runners", {}).get(name, {}).get("stdin")
+    return bool(override) if override is not None else name in STDIN_PROMPT
 
 
 def run(queue, name, config, parallel=4, print_cmd=False, timeout=660):
@@ -68,7 +135,8 @@ def run(queue, name, config, parallel=4, print_cmd=False, timeout=660):
                 queue.claim(identifier, owner, timeout + 60)
                 path = queue.locate(identifier)[1]
                 argv = command(name, path, config)
-                jobs[pool.submit(execute, argv, path, name in ("agy", "grok"), timeout)] = (identifier, path)
+                stdin_text = prompt_text(path) if _uses_stdin(name, config) else None
+                jobs[pool.submit(execute, argv, path, name in ("agy", "grok"), timeout, stdin_text)] = (identifier, path)
             for future in as_completed(jobs):
                 identifier, path = jobs[future]
                 errors = future.result()

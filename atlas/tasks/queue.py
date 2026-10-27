@@ -98,7 +98,11 @@ class Queue:
                 previous = next((r for r in self.list() if r["task_id"] == identifier), None)
                 if previous:
                     if previous["input_hash"] != envelope["input_hash"]:
-                        raise ValueError("task ID collision: document contents changed; use new document IDs or a new prompt version")
+                        raise ValueError(
+                            f"task {identifier} already exists in {self.root} (state {previous['state']}) "
+                            "but its documents changed since it was made. Identical re-runs are skipped "
+                            "automatically; for changed content either use a fresh ATLAS_DATA_DIR, "
+                            "remove that task directory, or give the changed documents new IDs.")
                     made.append(identifier)
                     continue
                 destination = self.root / "pending" / identifier.replace(":", "__")
