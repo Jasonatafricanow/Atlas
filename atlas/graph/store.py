@@ -4,6 +4,7 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from contextlib import contextmanager
 
 from .models import NODE_TYPES
 
@@ -25,6 +26,16 @@ class GraphStore:
 
     def close(self):
         self.db.close()
+
+    @contextmanager
+    def transaction(self):
+        """Nest graph operations inside one atomic task merge."""
+        if self.db.in_transaction:
+            yield
+        else:
+            with self.db:
+                self.db.execute("BEGIN IMMEDIATE")
+                yield
 
     def get(self, table, record_id):
         if table not in TABLES:
@@ -63,7 +74,7 @@ class GraphStore:
 
     def put(self, table, record):
         record, op = self._prepare(table, record)
-        with self.db:
+        with self.transaction():
             self._write(table, record, op)
         return op
 
@@ -81,7 +92,7 @@ class GraphStore:
         if old.get("valid_from") and valid_to < old["valid_from"]:
             raise ValueError("valid_to precedes valid_from")
         old.update(status="superseded", valid_to=valid_to, superseded_by=new_id)
-        with self.db:
+        with self.transaction():
             self._write(table, replacement, op)
             self._write(table, old, "SUPERSEDE")
 

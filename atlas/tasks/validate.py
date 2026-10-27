@@ -78,6 +78,20 @@ def validate_output(kind, output, task_input, store):
             for index, item in enumerate(value):
                 walk(item, f"{path}[{index}]", evidence)
     walk(output)
+    if kind == "resolve_entities":
+        walk(task_input["candidates"])
+        candidates = {c["tmp_id"]: c for c in task_input["candidates"]}
+        ids = [op["tmp_id"] for op in output["ops"]]
+        if len(candidates) != len(task_input["candidates"]) or len(ids) != len(set(ids)) or set(ids) != set(candidates):
+            errors.append("$.ops: exactly one operation per unique candidate required")
+        nodes = {node["node_id"]: node for node in task_input["nodes"]}
+        for op in output["ops"]:
+            if op["op"] == "MERGE_INTO":
+                node = nodes.get(op.get("node_id"))
+                if not node or node["type"] != candidates.get(op["tmp_id"], {}).get("type"):
+                    errors.append("$.ops.node_id: existing same-type target required")
+            elif "node_id" in op:
+                errors.append("$.ops.node_id: only MERGE_INTO accepts a target")
     if kind == "extract_entities":
         ids = [e["tmp_id"] for e in output["entities"]]
         statement_ids = [s["tmp_id"] for s in output["statements"]]

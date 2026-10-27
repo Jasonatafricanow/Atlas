@@ -43,14 +43,15 @@ def main(argv=None):
     for name in ("ingest", "build", "all"):
         commands.add_parser(name).add_argument("--config", required=True)
     tasks = commands.add_parser("tasks").add_subparsers(dest="action", required=True)
-    for name in ("make", "list", "claim", "submit", "validate", "reap"):
+    for name in ("make", "list", "claim", "submit", "validate", "merge", "reap"):
         parser = tasks.add_parser(name)
         parser.add_argument("--config")
         if name == "make":
-            parser.add_argument("--kind", choices=["extract_entities"], required=True)
+            parser.add_argument("--kind", choices=["extract_entities", "resolve_entities"], required=True)
+            parser.add_argument("--input", help="resolution input JSON with candidates, nodes and documents")
         if name == "list":
             parser.add_argument("--json", action="store_true")
-        if name in ("claim", "submit", "validate"):
+        if name in ("claim", "submit", "validate", "merge"):
             parser.add_argument("task_id")
         if name == "claim":
             parser.add_argument("--owner", required=True)
@@ -98,11 +99,21 @@ def task_command(a):
         store = Store(data_dir)
     try:
         queue = Queue(data_dir, store, cfg.get("tasks", {}).get("forbidden_terms") if cfg else None)
-        if a.action == "make": result = queue.make(a.kind)
+        if a.action == "make":
+            from .tasks.queue import read_json
+            from pathlib import Path
+            result = queue.make(a.kind, read_json(Path(a.input)) if a.input else None)
         elif a.action == "list": result = queue.list()
         elif a.action == "claim": result = queue.claim(a.task_id, a.owner, a.lease_seconds)
         elif a.action == "submit": result = queue.submit(a.task_id, a.file, a.owner)
         elif a.action == "validate": result = queue.validate(a.task_id)
+        elif a.action == "merge":
+            from .tasks.merge import merge
+            graph = GraphStore(data_dir)
+            try:
+                result = merge(queue, graph, a.task_id)
+            finally:
+                graph.close()
         else: result = queue.reap()
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 1 if isinstance(result, dict) and result.get("state") == "rejected" else 0

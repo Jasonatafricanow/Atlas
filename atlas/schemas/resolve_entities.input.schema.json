@@ -63,6 +63,10 @@
               "additionalProperties": false
             },
             "minItems": 1
+          },
+          "node_id": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
@@ -100,11 +104,62 @@
         ],
         "additionalProperties": false
       }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ts": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "author": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "meta": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "ts",
+          "text",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 50
     }
   },
   "required": [
     "candidates",
-    "nodes"
+    "nodes",
+    "documents"
   ],
   "additionalProperties": false
 }
