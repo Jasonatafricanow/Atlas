@@ -51,7 +51,7 @@ def numbered_text(text):
 
 
 def compact_documents(documents):
-    """Assign deterministic task-local refs without duplicating canonical text."""
+    """Assign deterministic task-local refs (raw text kept for agents that read it)."""
     result = []
     for index, document in enumerate(sorted(documents, key=lambda d: d["id"]), 1):
         doc = dict(document)
