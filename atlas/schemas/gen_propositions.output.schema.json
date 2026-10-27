@@ -38,64 +38,110 @@
               "evidence": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "doc_id": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "span": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer",
-                        "minimum": 0
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doc_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "span": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "quote_hash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{12}$"
+                        }
                       },
-                      "minItems": 2,
-                      "maxItems": 2
+                      "required": [
+                        "doc_id",
+                        "span",
+                        "quote_hash"
+                      ],
+                      "additionalProperties": false
                     },
-                    "quote_hash": {
-                      "type": "string",
-                      "pattern": "^[a-f0-9]{12}$"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doc_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        }
+                      },
+                      "required": [
+                        "doc_id",
+                        "quote"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "doc_id",
-                    "span",
-                    "quote_hash"
-                  ],
-                  "additionalProperties": false
+                  ]
                 },
                 "minItems": 2
               },
               "counter_evidence": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "doc_id": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "span": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer",
-                        "minimum": 0
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doc_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "span": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "quote_hash": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{12}$"
+                        }
                       },
-                      "minItems": 2,
-                      "maxItems": 2
+                      "required": [
+                        "doc_id",
+                        "span",
+                        "quote_hash"
+                      ],
+                      "additionalProperties": false
                     },
-                    "quote_hash": {
-                      "type": "string",
-                      "pattern": "^[a-f0-9]{12}$"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doc_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        }
+                      },
+                      "required": [
+                        "doc_id",
+                        "quote"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "doc_id",
-                    "span",
-                    "quote_hash"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               },
               "confidence": {

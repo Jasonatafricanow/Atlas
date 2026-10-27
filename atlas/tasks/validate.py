@@ -15,6 +15,9 @@ def schema_for(name):
 def check_schema(value, schema, path="$", errors=None):
     """Validate the JSON Schema subset used by the shipped contracts."""
     errors = [] if errors is None else errors
+    if "oneOf" in schema and sum(not check_schema(value, branch) for branch in schema["oneOf"]) != 1:
+        errors.append(f"{path}: expected exactly one evidence form")
+        return errors
     types = {"object": lambda x: isinstance(x, dict),
              "array": lambda x: isinstance(x, list),
              "string": lambda x: isinstance(x, str),
@@ -54,9 +57,12 @@ def check_schema(value, schema, path="$", errors=None):
 
 
 def validate_output(kind, output, task_input, store):
+    from .evidence import normalize_output
+    quote_errors = normalize_output(output, task_input, store)
     errors = check_schema(output, schema_for(kind + ".output"))
     if errors:
         return errors
+    errors.extend(quote_errors)
     allowed = {d["id"] for d in task_input.get("documents", [])}
 
     def walk(value, path="$", evidence=False):
@@ -146,6 +152,8 @@ def validate_output(kind, output, task_input, store):
 
 def accept_items(kind, output, task_input, store, edges=None):
     """Keep independently valid items; return indexed diagnostics and counts."""
+    from .evidence import normalize_output
+    quote_errors = normalize_output(output, task_input, store)
     schema = schema_for(kind + ".output")
     groups = {"extract_entities": ["entities", "relations", "statements"],
               "resolve_entities": ["ops"], "gen_propositions": ["ops"],
@@ -162,7 +170,7 @@ def accept_items(kind, output, task_input, store, edges=None):
     if errors:
         return {}, errors, True, {"accepted": 0, "dropped": 0}
     kept = {**output, **{group: [] for group in groups}}
-    errors = []
+    errors = list(quote_errors)
     seen = set()
     for group in groups:
         items = output[group]
@@ -171,6 +179,19 @@ def accept_items(kind, output, task_input, store, edges=None):
             identities.append(item.get("tmp_id") if isinstance(item, dict) else None)
         for index, item in enumerate(items):
             reasons = check_schema(item, schema["properties"][group]["items"])
+            if not reasons and kind == "extract_entities" and group in ("relations", "statements"):
+                ids = {entity["tmp_id"] for entity in kept["entities"]}
+                names = {}
+                for entity in kept["entities"]:
+                    for name in [entity["name"], *entity["aliases"]]:
+                        names.setdefault(name, set()).add(entity["tmp_id"])
+                def reference(value):
+                    candidates = names.get(value, set())
+                    return value if value in ids or len(candidates) != 1 else next(iter(candidates))
+                if group == "relations":
+                    item["src"], item["dst"] = reference(item["src"]), reference(item["dst"])
+                else:
+                    item["about"] = list(dict.fromkeys(reference(value) for value in item["about"]))
             if not reasons:
                 probe = {**kept, **{g: [] for g in groups}}
                 probe[group] = [item]

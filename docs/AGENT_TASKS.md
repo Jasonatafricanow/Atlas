@@ -1,12 +1,14 @@
-﻿# Agent task workflow and M6 quality
+﻿# Agent task workflow and M7 light models
 
 ATLAS is an offline graph and correctable profile shell. Task work lives only in
 `ATLAS_DATA_DIR/work/{pending,claimed,submitted,accepted,rejected}/<task_id>/`.
 A task directory contains its envelope, input, output schema and instructions;
 claiming adds a lease, submission adds output and validation errors when needed.
-Use the task directory's schema as authority. Never copy source excerpts into
-an evidence pointer: use `{doc_id, span: [start,end], quote_hash}` with the first
-12 hexadecimal characters of SHA-256 over the UTF-8 source span.
+Use the task directory's schema as authority. Prefer `{doc_id, quote}` evidence:
+copy an exact, nonblank excerpt of at most 60 Unicode characters. Agents need not
+compute hashes. ATLAS converts quotes to `{doc_id, span: [start,end], quote_hash}`
+using original character offsets (end exclusive) and the first 12 hexadecimal
+characters of SHA-256 over the UTF-8 source span. Existing span/hash pointers remain valid.
 
 | Kind | Contract | Current support |
 | --- | --- | --- |
@@ -102,7 +104,7 @@ python -m atlas all --config $c   # -> _demo_out/run-site/index.html
 ```
 ## M6 quality contracts
 
-New tasks use schema/prompt version 2; existing task directories and their original
+M6 tasks used schema/prompt version 2; M7 tasks use version 3; existing task directories and their original
 outputs are retained. Re-extraction under the new version is an explicit new task,
 not a migration of previously merged graph records.
 
@@ -114,19 +116,20 @@ interval. Plain text falls back to document author/time. Ambiguous multi-speaker
 spans have unknown speaker; unknown dates are never replaced by processing time.
 
 Validation retains independent valid entities, relations, statements, operations
-and lines. `output.json` remains the original submission; `accepted.json` contains
-only retained items. `errors.json` lists indexed reasons. `validation.json` and the
+and lines. `output.json` contains the normalized submission; `accepted.json` contains
+only retained items. Agent originals are preserved under `attempts/*/output.json`. `errors.json` lists indexed reasons. `validation.json` and the
 CLI response contain `partial`, accepted/dropped counts, and diagnostics. Missing
 resolution operations are reported against candidate indices. Broken input or
 envelope data, malformed outer output, or no valid items rejects the task.
 Dropped entities also drop dependent relations/statements. Merge revalidates and
-uses only accepted items, with a transaction and original-output hash for replay
+uses only accepted items, with a transaction and normalized-output hash for replay
 idempotency. Live graph changes that make an accepted operation stale still abort
 its transaction rather than silently overwrite newer state.
 
 `tasks make --kind cluster_lens` snapshots persisted statements and active
 propositions (with source IDs, time, speaker, text, about, and evidence). It makes
-batches of at most 200 records and the configured character target; one oversized
+batches of at most `[tasks].lines_batch` records (default 60, including propositions)
+and the configured character target; one oversized
 record remains intact. Empty graphs produce no tasks. Submit JSON of this shape:
 
 ```json
@@ -160,6 +163,7 @@ the same calibration. Scores are evidence-breadth limits, not truth probabilitie
 [tasks]
 batch_docs = 50
 batch_chars = 40000
+lines_batch = 60
 ```
 
 Extraction respects both batch limits; a single oversized document remains intact
@@ -184,3 +188,28 @@ Offline checks (no agents or paid APIs):
 C:\Python314\python.exe -m unittest discover -s tests
 C:\Python314\python.exe tools/leak_scan.py
 ```
+
+## M7 quote resolution and reference repair
+
+Quotes resolve only against task-scoped documents in the canonical, credential-filtered
+store. Exact matches take precedence. Otherwise ATLAS ignores whitespace and folds
+full-width punctuation, mapping the result back to original offsets. Repeated quotes
+select the first occurrence not already used by the same item (across support and
+counter evidence, including supplied span pointers), then fall back to the first.
+No case folding, fuzzy text repair, or invented source text is used.
+
+Unresolvable quotes remove only that evidence, with indexed diagnostics that omit
+quote text. Items left without required evidence are dropped. Propositions still
+need two distinct supports, disjoint counter evidence, and retention of known counter
+evidence; correction precedence is unchanged. Quote text is removed from normalized
+output and never stored in graph evidence. Revalidation checks normalized pointers
+against the source again. Original submissions remain in attempts, including rejected
+submissions; these task workspaces are private runtime artifacts, never repository data.
+
+Relations and statements must reference entity tmp_ids from the same output. A unique
+exact entity name or alias is repaired to its tmp_id. Unknown or ambiguous references,
+and references to dropped entities, drop the dependent item. Existing tmp_ids take
+precedence over names. Empty graphs still produce no cluster tasks. `lines_batch`
+must be a positive integer; character limits still apply and oversized single records
+stay intact. Existing task directories are not rewritten when new version-3 tasks
+are created; no historical graph migration is performed.

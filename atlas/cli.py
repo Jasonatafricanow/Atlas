@@ -129,7 +129,7 @@ def task_command(a):
         store = Store(data_dir)
     try:
         options = cfg.get("tasks", {}) if cfg else {}
-        queue = Queue(data_dir, store, options.get("forbidden_terms"), options.get("batch_docs", 50), options.get("batch_chars", 40000))
+        queue = Queue(data_dir, store, options.get("forbidden_terms"), options.get("batch_docs", 50), options.get("batch_chars", 40000), options.get("lines_batch", 60))
         if a.cmd == "profile":
             from .profile import correct, propositions, sync_corrections
             graph = GraphStore(data_dir)

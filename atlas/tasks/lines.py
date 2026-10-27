@@ -23,7 +23,7 @@ def make_lines(queue, graph):
     combined.sort(key=lambda pair: (time_key(pair[1].get("ts")), pair[1]["statement_id"]))
     batches, batch, size = [], [], 0
     for pair in combined:
-        if batch and (len(batch) >= 200 or size + len(pair[1]["text"]) > queue.batch_chars):
+        if batch and (len(batch) >= queue.lines_batch or size + len(pair[1]["text"]) > queue.batch_chars):
             batches.append(batch)
             batch, size = [], 0
         batch.append(pair)

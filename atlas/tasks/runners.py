@@ -25,8 +25,8 @@ TEMPLATES = {
 # cmd.exe quoting of multi-line text when the program is a .cmd shim).
 STDIN_PROMPT = {"codex"}
 PROMPT_HEAD = ("Work only inside the current task directory. Read input.json and INSTRUCTIONS.md, "
-               "then write output.json (UTF-8) matching output.schema.json. You may run local "
-               "scripts (e.g. python) to compute spans and hashes and to self-check the output.\n")
+               "then write output.json (UTF-8) matching output.schema.json. Prefer {doc_id, quote} "
+               "evidence (exact excerpt, at most 60 characters). Do not compute hashes.\n")
 
 
 def resolve_program(argv):
