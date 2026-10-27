@@ -78,3 +78,23 @@ For direct CLI corrections use:
 `atlas profile correct <prop_id> --verdict wrong|right|amend --note <note>`
 with an explicit demo data path or config. `atlas profile list` displays the
 current projected state. M6/MCP is not part of this milestone.
+
+## Real agent run on the fictional corpus (Windows)
+
+Runners resolve `codex`/`agy`/`grok` via PATH, `ATLAS_RUNNER_PATH` and default
+per-user install dirs (`%APPDATA%\npm`, `%LOCALAPPDATA%\agy\bin`, `~\.grok\bin`);
+`.cmd` shims run through `cmd /c`, `.ps1` through PowerShell. Codex receives the
+prompt on stdin (`-`), grok via `--prompt-file`, agy via a short `-p` pointing at
+`PROMPT.md`. Codex has no `--output-schema` (strict mode rejects optional keys);
+ATLAS validates output.json itself. Agent JSON wrappers (`structuredOutput`,
+`result`, `response`...) are unwrapped. Encoding-corrupted output is rejected.
+
+```powershell
+$c = "examples/atlas.run.config.toml"
+python -m atlas tasks make --kind extract_entities --config $c
+python -m atlas tasks run --runner codex --timeout 1200 --config $c
+python -m atlas tasks merge <task_id> --config $c
+python -m atlas tasks make --kind gen_propositions --node <node_id> --config $c
+python -m atlas tasks run --runner codex --parallel 4 --timeout 1200 --config $c
+python -m atlas all --config $c   # -> _demo_out/run-site/index.html
+```

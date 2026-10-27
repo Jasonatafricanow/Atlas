@@ -10,10 +10,12 @@ from .queue import write_json
 
 TEMPLATES = {
     "codex": ["codex", "exec", "-C", "{task_dir}", "-s", "workspace-write",
-              "--skip-git-repo-check", "--ephemeral", "--output-schema",
-              "{task_dir}/output.schema.json", "-o", "{task_dir}/output.json", "-"],
+              "--skip-git-repo-check", "--ephemeral",
+              "-o", "{task_dir}/last_message.txt", "-"],
+    # No --output-schema: OpenAI strict structured output rejects optional keys
+    # (e.g. relations[].supersedes). The agent writes output.json; ATLAS validates.
     "agy": ["agy", "-p", "{prompt_short}", "--output-format", "json", "--json-schema",
-            "{task_dir}/output.schema.json", "--mode", "accept-edits", "--add-dir",
+            "{task_dir}/output.schema.json", "--mode", "accept-edits", "--dangerously-skip-permissions", "--add-dir",
             "{task_dir}", "--print-timeout", "600s"],
     "grok": ["grok", "--prompt-file", "{prompt_file}", "--cwd", "{task_dir}", "--output-format",
              "json", "--json-schema", "{schema}", "--always-approve"],
@@ -22,16 +24,19 @@ TEMPLATES = {
 # Templates whose full prompt is piped on stdin (avoids Windows argv limits and
 # cmd.exe quoting of multi-line text when the program is a .cmd shim).
 STDIN_PROMPT = {"codex"}
-PROMPT_HEAD = "Read input.json and INSTRUCTIONS.md. Write output.json matching output.schema.json.\n"
+PROMPT_HEAD = ("Work only inside the current task directory. Read input.json and INSTRUCTIONS.md, "
+               "then write output.json (UTF-8) matching output.schema.json. You may run local "
+               "scripts (e.g. python) to compute spans and hashes and to self-check the output.\n")
 
 
 def resolve_program(argv):
     """Resolve argv[0] via PATH/PATHEXT (finds npm .cmd shims) and wrap batch files."""
     program = argv[0]
-    found = shutil.which(program)
+    search = os.pathsep.join(_search_dirs())
+    found = shutil.which(program, path=search)
     if not found and os.name == "nt":
         for suffix in (".cmd", ".exe", ".bat", ".ps1"):
-            found = shutil.which(program + suffix)
+            found = shutil.which(program + suffix, path=search)
             if found:
                 break
     if not found:
@@ -42,6 +47,19 @@ def resolve_program(argv):
     if lower.endswith(".ps1"):
         return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", found] + list(argv[1:])
     return [found] + list(argv[1:])
+
+
+def _search_dirs():
+    """PATH plus ATLAS_RUNNER_PATH and the default per-user install dirs of npm/agy/grok,
+    which non-login shells on Windows often miss."""
+    dirs = [d for d in os.environ.get("ATLAS_RUNNER_PATH", "").split(os.pathsep) if d]
+    dirs += [d for d in os.environ.get("PATH", "").split(os.pathsep) if d]
+    home = os.path.expanduser("~")
+    for base, sub in (("APPDATA", "npm"), ("LOCALAPPDATA", os.path.join("agy", "bin"))):
+        if os.environ.get(base):
+            dirs.append(os.path.join(os.environ[base], sub))
+    dirs += [os.path.join(home, ".grok", "bin"), os.path.join(home, ".local", "bin")]
+    return dirs
 
 
 def command(name, path, config):
@@ -75,7 +93,7 @@ def extract_json(text):
         if start < 0 or end <= start:
             raise
         value = json.loads(text[start:end + 1])
-    for key in ("structured_output", "result", "output", "response"):
+    for key in ("structured_output", "structuredOutput", "result", "output", "response", "text"):
         if isinstance(value, dict) and key in value and not {"entities", "operations", "decisions"} & set(value):
             inner = value[key]
             if isinstance(inner, str):
@@ -86,6 +104,11 @@ def extract_json(text):
             if isinstance(inner, dict):
                 return inner
     return value
+
+
+def _looks_mojibake(text):
+    import re
+    return "\ufffd" in text or re.search(r"\?{4,}", text) is not None
 
 
 def execute(argv, path, stdout_output, timeout, stdin_text=None):
@@ -103,8 +126,16 @@ def execute(argv, path, stdout_output, timeout, stdin_text=None):
         if stdout_output:
             import json
             write_json(path / "output.json", extract_json(result.stdout.decode("utf-8", "replace")))
+        last = path / "last_message.txt"
+        if not (path / "output.json").is_file() and last.is_file():
+            try:
+                write_json(path / "output.json", extract_json(last.read_text(encoding="utf-8")))
+            except ValueError:
+                pass
         if not (path / "output.json").is_file():
             return ["runner did not produce output.json"]
+        if _looks_mojibake((path / "output.json").read_text(encoding="utf-8", errors="replace")):
+            return ["output.json looks encoding-corrupted (runs of '?' or U+FFFD); rerun the task"]
         return []
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         # Never persist stdout/stderr or exception messages containing credentials.

@@ -8,7 +8,7 @@ from atlas.schema import Document
 from atlas.store import Store
 from atlas.tasks.guard import redact, valid_identity, valid_luhn
 from atlas.tasks.queue import Queue
-from atlas.tasks.runners import command, extract_json, resolve_program, run
+from atlas.tasks.runners import _looks_mojibake, command, extract_json, resolve_program, run
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,7 +69,10 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(len(commands), 4)
             argv = commands[0]
             self.assertEqual(argv[0], name)
-            schema = argv[argv.index('--json-schema' if name != 'codex' else '--output-schema') + 1]
+            if name == 'codex':
+                self.assertEqual(argv[-1], '-')
+                continue
+            schema = argv[argv.index('--json-schema') + 1]
             if name == 'grok':
                 self.assertEqual(json.loads(schema)['type'], 'object')
             else:
@@ -147,6 +150,8 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(extract_json('{"entities": []}'), {'entities': []})
         self.assertEqual(extract_json('{"result": "{\\"entities\\": [1]}"}'), {'entities': [1]})
         self.assertEqual(extract_json('{"structured_output": {"entities": [2]}}'), {'entities': [2]})
+        self.assertEqual(extract_json('{"structuredOutput": {"ops": []}, "text": "x", "usage": {}}'), {'ops': []})
+        self.assertEqual(extract_json('{"response": "{\\"ops\\": [1]}", "status": "ok"}'), {'ops': [1]})
         self.assertEqual(extract_json('note\n{"entities": [3]}\n'), {'entities': [3]})
 
     def test_codex_prompt_on_stdin(self):
@@ -171,3 +176,10 @@ class ResolveTests(unittest.TestCase):
                 queue.make()
             self.assertIn('fresh ATLAS_DATA_DIR', str(ctx.exception))
             store.db.close()
+
+
+class MojibakeTests(unittest.TestCase):
+    def test_detects_corrupted_text(self):
+        self.assertTrue(_looks_mojibake('{"text": "????????"}'))
+        self.assertTrue(_looks_mojibake('\ufffd'))
+        self.assertFalse(_looks_mojibake('{"text": "\u4f5c\u8005? \u662f\u7684"}'))
