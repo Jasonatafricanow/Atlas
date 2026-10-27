@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "line_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "topic_node_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ts": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "statement_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "shift": {
+                  "enum": [
+                    "none",
+                    "refine",
+                    "reverse"
+                  ]
+                }
+              },
+              "required": [
+                "ts",
+                "statement_id",
+                "shift"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "line_id",
+          "title",
+          "topic_node_id",
+          "timeline"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "line_id_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "old_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "new_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "old_id",
+          "new_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "lines",
+    "line_id_map"
+  ],
+  "additionalProperties": false
+}

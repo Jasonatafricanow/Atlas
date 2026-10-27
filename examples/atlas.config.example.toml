@@ -1,7 +1,7 @@
 # Copy to your PRIVATE repo / data dir. Paths may also come from env (see .env.example).
 # The core has NO default data path: one of these must be set.
 [paths]
-data_dir = "./synthetic_corpus"   # demo only (fictional). Real use: absolute path outside this repo
+data_dir = "../_demo_out/data"   # demo only (fictional). Real use: absolute path outside this repo
 out_dir  = "../_demo_out"
 
 [plugins]
@@ -9,7 +9,7 @@ paths = []                    # e.g. ["D:/my-atlas-private/lenses"] for private 
 
 [[sources]]
 adapter = "jsonl_notes"
-options = { path = "reading_notes.jsonl" }   # relative to data_dir
+options = { path = "../../examples/synthetic_corpus/reading_notes.jsonl" }   # relative to data_dir
 
 [[lenses]]
 lens = "judgment_lines"

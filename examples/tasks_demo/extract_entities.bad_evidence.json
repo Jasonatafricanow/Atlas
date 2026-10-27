@@ -1,0 +1,22 @@
+{
+  "entities": [
+    {
+      "tmp_id": "e1",
+      "type": "concept",
+      "name": "Street activity",
+      "aliases": [],
+      "evidence": [
+        {
+          "doc_id": "synthetic-note-01",
+          "span": [
+            0,
+            39
+          ],
+          "quote_hash": "abcdefabcdef"
+        }
+      ]
+    }
+  ],
+  "relations": [],
+  "statements": []
+}

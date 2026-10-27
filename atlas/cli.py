@@ -39,15 +39,76 @@ def build(cfg, st=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="atlas")
-    ap.add_argument("cmd", choices=["ingest", "build", "all"])
-    ap.add_argument("--config", required=True)
+    commands = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("ingest", "build", "all"):
+        commands.add_parser(name).add_argument("--config", required=True)
+    tasks = commands.add_parser("tasks").add_subparsers(dest="action", required=True)
+    for name in ("make", "list", "claim", "submit", "validate", "reap"):
+        parser = tasks.add_parser(name)
+        parser.add_argument("--config")
+        if name == "make":
+            parser.add_argument("--kind", choices=["extract_entities"], required=True)
+        if name == "list":
+            parser.add_argument("--json", action="store_true")
+        if name in ("claim", "submit", "validate"):
+            parser.add_argument("task_id")
+        if name == "claim":
+            parser.add_argument("--owner", required=True)
+            parser.add_argument("--lease-seconds", type=int, default=300)
+        if name == "submit":
+            parser.add_argument("--file", required=True)
+            parser.add_argument("--owner")
+    graph = commands.add_parser("graph").add_subparsers(dest="action", required=True)
+    graph.add_parser("stats").add_argument("--config")
     a = ap.parse_args(argv)
-    cfg = C.load(a.config)
-    R.add_paths([p if os.path.isabs(p) else os.path.join(cfg["config_dir"], p)
-                 for p in cfg.get("plugins", {}).get("paths", [])])
-    if a.cmd == "ingest": ingest(cfg)
-    elif a.cmd == "build": build(cfg)
-    else: build(cfg, ingest(cfg))
+    try:
+        if a.cmd in ("tasks", "graph"):
+            return task_command(a)
+        cfg = C.load(a.config)
+        R.add_paths([p if os.path.isabs(p) else os.path.join(cfg["config_dir"], p)
+                     for p in cfg.get("plugins", {}).get("paths", [])])
+        if a.cmd == "ingest": ingest(cfg)
+        elif a.cmd == "build": build(cfg)
+        else: build(cfg, ingest(cfg))
+        return 0
+    except (C.ConfigError, ValueError, OSError) as exc:
+        ap.error(str(exc))
+
+
+def task_command(a):
+    from .graph.store import GraphStore
+    from .tasks.queue import Queue
+
+    cfg = C.load(a.config) if a.config else None
+    data_dir = cfg["data_dir"] if cfg else os.environ.get("ATLAS_DATA_DIR")
+    if not data_dir:
+        raise C.ConfigError("set ATLAS_DATA_DIR or provide --config; no default data path")
+    if a.cmd == "graph":
+        graph = GraphStore(data_dir)
+        try:
+            print(json.dumps(graph.stats(), indent=2))
+        finally:
+            graph.close()
+        return 0
+    if a.action == "make" and cfg:
+        R.add_paths([p if os.path.isabs(p) else os.path.join(cfg["config_dir"], p)
+                     for p in cfg.get("plugins", {}).get("paths", [])])
+        store = ingest(cfg)
+    else:
+        store = Store(data_dir)
+    try:
+        queue = Queue(data_dir, store, cfg.get("tasks", {}).get("forbidden_terms") if cfg else None)
+        if a.action == "make": result = queue.make(a.kind)
+        elif a.action == "list": result = queue.list()
+        elif a.action == "claim": result = queue.claim(a.task_id, a.owner, a.lease_seconds)
+        elif a.action == "submit": result = queue.submit(a.task_id, a.file, a.owner)
+        elif a.action == "validate": result = queue.validate(a.task_id)
+        else: result = queue.reap()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 1 if isinstance(result, dict) and result.get("state") == "rejected" else 0
+    finally:
+        store.db.close()
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

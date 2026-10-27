@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "statement": {
+      "type": "object",
+      "properties": {
+        "tmp_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "fact",
+            "opinion",
+            "plan",
+            "preference"
+          ]
+        },
+        "about": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "stance": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "doc_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "span": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "quote_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{12}$"
+              }
+            },
+            "required": [
+              "doc_id",
+              "span",
+              "quote_hash"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "tmp_id",
+        "kind",
+        "about",
+        "text",
+        "confidence",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "market_data": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "statement",
+    "market_data"
+  ],
+  "additionalProperties": false
+}

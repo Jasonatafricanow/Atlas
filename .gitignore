@@ -6,3 +6,6 @@ out/
 data/
 __pycache__/
 *.pyc
+work/
+*.sqlite-shm
+*.sqlite-wal

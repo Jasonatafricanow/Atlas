@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "statement_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "outcome": {
+      "enum": [
+        "confirmed",
+        "refuted",
+        "mixed",
+        "unknown"
+      ]
+    },
+    "basis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "statement_id",
+    "outcome",
+    "basis",
+    "data_ref"
+  ],
+  "additionalProperties": false
+}
