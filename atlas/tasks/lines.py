@@ -57,17 +57,16 @@ def validate_lines(output, payload):
         if ids != expected:
             errors.append("timeline must be in source time order (unknown first)")
         if not any(line["topic"] in sources[i]["about"] for i in ids):
-            errors.append("topic must reference an input about node")
-        connected = set(sources[ids[0]]["about"])
-        pending = list(ids[1:])
-        while pending:
-            linked = [i for i in pending if connected.intersection(sources[i]["about"])]
-            if not linked:
-                errors.append("timeline contains unrelated statements")
-                break
-            for i in linked:
-                connected.update(sources[i]["about"])
-                pending.remove(i)
+            # Repair instead of rejecting: anchor the line on its most frequent about node.
+            counts = {}
+            for i in ids:
+                for n in sources[i]["about"]:
+                    counts[n] = counts.get(n, 0) + 1
+            if counts:
+                line.setdefault("topic_label", line["topic"])
+                line["topic"] = max(sorted(counts), key=counts.get)
+        # Grouping is a semantic judgment by the agent; statements need not share an
+        # about node (e.g. two different stocks discussed under one trading rule).
         for index, point in enumerate(line["timeline"]):
             source = sources[point["statement_id"]]
             if (index == 0) != (point["shift"] == "first"):

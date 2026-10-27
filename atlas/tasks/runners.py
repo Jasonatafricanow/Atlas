@@ -16,7 +16,7 @@ TEMPLATES = {
     # (e.g. relations[].supersedes). The agent writes output.json; ATLAS validates.
     "agy": ["agy", "-p", "{prompt_short}", "--output-format", "json", "--json-schema",
             "{task_dir}/output.schema.json", "--mode", "accept-edits", "--dangerously-skip-permissions", "--add-dir",
-            "{task_dir}", "--print-timeout", "600s"],
+            "{task_dir}", "--print-timeout", "{timeout}s"],
     "grok": ["grok", "--prompt-file", "{prompt_file}", "--cwd", "{task_dir}", "--output-format",
              "json", "--json-schema", "{schema}", "--always-approve"],
 }
@@ -62,19 +62,19 @@ def _search_dirs():
     return dirs
 
 
-def command(name, path, config):
+def command(name, path, config, timeout=600):
     template = config.get("runners", {}).get(name, {}).get("cmd", TEMPLATES.get(name))
     if not isinstance(template, list) or not template or any(not isinstance(x, str) for x in template):
         raise ValueError("runner requires a nonempty cmd array")
     values = {"task_dir": str(path.resolve()), "python": sys.executable,
-              "config_dir": config.get("config_dir", ""),
+              "config_dir": config.get("config_dir", ""), "timeout": str(int(timeout)),
               "schema": (path / "output.schema.json").read_text(encoding="utf-8"),
               "prompt": prompt_text(path),
               "prompt_file": str((path / "PROMPT.md").resolve()),
               "prompt_short": "Read PROMPT.md in " + str(path.resolve()) + " and follow it exactly."}
     # Replace only known placeholders, leaving literal JSON braces untouched.
     import re
-    return [re.sub(r"\{(task_dir|python|config_dir|schema|prompt_file|prompt_short|prompt)\}",
+    return [re.sub(r"\{(task_dir|python|config_dir|schema|prompt_file|prompt_short|prompt|timeout)\}",
                    lambda match: values[match[1]], item) for item in template]
 
 
@@ -165,7 +165,7 @@ def run(queue, name, config, parallel=4, print_cmd=False, timeout=660):
                 command(name, queue.locate(identifier)[1], config)  # validate before claim
                 queue.claim(identifier, owner, timeout + 60)
                 path = queue.locate(identifier)[1]
-                argv = command(name, path, config)
+                argv = command(name, path, config, max(1, timeout - 30))
                 stdin_text = prompt_text(path) if _uses_stdin(name, config) else None
                 jobs[pool.submit(execute, argv, path, name in ("agy", "grok"), timeout, stdin_text)] = (identifier, path)
             for future in as_completed(jobs):

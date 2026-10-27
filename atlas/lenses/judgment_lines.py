@@ -31,22 +31,33 @@ def grouped_lines(graph):
         if points:
             groups.append(dict(line, points=points, about=about))
             covered.update(points)
+    # Hub nodes (people, or nodes about most statements, e.g. the owner) would chain
+    # everything into one mega line; they never join groups.
+    freq = {}
+    for src in sources.values():
+        for n in set(src.get("about", [])):
+            freq[n] = freq.get(n, 0) + 1
+    limit = max(3, 0.25 * len(sources))
+    hubs = {n for n, c in freq.items() if c > limit or nodes.get(n, {}).get("type") == "person"}
+    for group in groups:
+        group["agent"] = True
     fallback = graph.get("statements", []) or list(sources.values())
     for source in fallback:
         identifier = source["statement_id"]
         if identifier in covered:
             continue
         point = dict(source, shift=None, reason="未评估变化", outcome="unknown", outcome_statement_ids=[], outcome_reason="")
-        groups.append(dict(points={identifier: point}, about=set(source["about"])))
+        groups.append(dict(points={identifier: point}, about=set(source["about"]), agent=False))
     # Connected components, not one card per statement or per shared node.
     merged = []
     for group in groups:
         index = 0
         while index < len(merged):
             other = merged[index]
-            if group["about"] & other["about"]:
+            if (not (group["agent"] and other["agent"])) and (group["about"] & other["about"]) - hubs:
                 group["about"].update(other["about"])
                 group["points"] = {**group["points"], **other["points"]}
+                group["agent"] = group["agent"] or other["agent"]
                 if "title" not in group and "title" in other:
                     group.update(title=other["title"], topic_node_id=other["topic_node_id"])
                 merged.pop(index)
