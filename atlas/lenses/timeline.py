@@ -1,11 +1,12 @@
-from collections import defaultdict
+"""Chronological graph references without source excerpts."""
 from . import Lens
+
 
 class TimelineLens(Lens):
     name = "timeline"
-    title = "时间线"
+    title = '时间线'
+
     def build(self, docs):
-        by = defaultdict(list)
-        for d in docs:
-            by[d.ts[:7]].append({"id": d.id, "ts": d.ts, "text": d.text, "channel": d.channel})
-        return {"type": "timeline", "months": [{"month": m, "items": by[m]} for m in sorted(by, reverse=True)]}
+        items = [dict(statement_id=p["prop_id"], ts=p.get("valid_from") or p.get("observed_at"))
+                 for p in self.ctx["graph"]["propositions"]]
+        return dict(type="timeline", items=sorted(items, key=lambda p: (p["ts"] or "", p["statement_id"])))

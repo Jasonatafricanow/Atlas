@@ -18,19 +18,31 @@ def ingest(cfg):
 def build(cfg, st=None):
     st = st or Store(cfg["data_dir"])
     docs = list(st.all())
+    from .graph.store import GraphStore
+    from .profile import sync_corrections
+    graph = GraphStore(cfg["data_dir"])
+    try:
+        sync_corrections(graph, cfg["data_dir"])
+        snapshot = {table: [json.loads(row[0]) for row in graph.db.execute(
+            f"SELECT data FROM {table} ORDER BY id")]
+            for table in ("nodes", "edges", "propositions")}
+    finally:
+        graph.close()
     views = []
     for L in cfg.get("lenses", []):
         cls = R.load(L["lens"], R.BUILTIN_LENSES)
         lc = {}
         if L.get("config"):
             p = L["config"] if os.path.isabs(L["config"]) else os.path.join(cfg["config_dir"], L["config"])
-            lc = json.load(open(p, encoding="utf-8"))
-        lens = cls(lc, {"data_dir": cfg["data_dir"]})
+            with open(p, encoding="utf-8") as stream:
+                lc = json.load(stream)
+        lens = cls(lc, {"data_dir": cfg["data_dir"], "graph": snapshot})
         views.append({"name": L.get("id", lens.name), "title": L.get("title", lens.title), "view": lens.build(docs)})
     out = cfg["out_dir"]; os.makedirs(out, exist_ok=True)
     data = {"atlas": __version__, "built": datetime.datetime.now().isoformat(timespec="seconds"),
-            "n_docs": len(docs), "views": views}
-    json.dump(data, open(os.path.join(out, "atlas.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            "n_docs": len(docs), **snapshot, "lenses": views}
+    with open(os.path.join(out, "atlas.json"), "w", encoding="utf-8") as stream:
+        json.dump(data, stream, ensure_ascii=False, indent=1)
     # data.js lets index.html work from file:// without fetch
     with open(os.path.join(out, "data.js"), "w", encoding="utf-8") as f:
         f.write("window.ATLAS_DATA=" + json.dumps(data, ensure_ascii=False) + ";")
