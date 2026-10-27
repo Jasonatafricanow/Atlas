@@ -128,6 +128,14 @@
                   "string",
                   "null"
                 ]
+              },
+              "kind": {
+                "enum": [
+                  "fact",
+                  "opinion",
+                  "plan",
+                  "preference"
+                ]
               }
             },
             "required": [
@@ -139,9 +147,14 @@
               "confidence",
               "valid_from",
               "valid_to",
-              "status"
+              "status",
+              "kind"
             ],
             "additionalProperties": false
+          },
+          "supersedes": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [

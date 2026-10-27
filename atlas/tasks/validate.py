@@ -78,6 +78,31 @@ def validate_output(kind, output, task_input, store):
             for index, item in enumerate(value):
                 walk(item, f"{path}[{index}]", evidence)
     walk(output)
+    if kind == "gen_propositions":
+        nodes = {n["node_id"] for n in task_input["subgraph"].get("nodes", [])}
+        existing = {p["prop_id"]: p for p in task_input["propositions"]}
+        seen = set()
+        for operation in output["ops"]:
+            prop = operation["prop"]
+            if prop["prop_id"] in seen:
+                errors.append("$.ops: duplicate proposition identity")
+            seen.add(prop["prop_id"])
+            if task_input["node_id"] not in prop["subject_node_ids"] or not set(prop["subject_node_ids"]) <= nodes:
+                errors.append("$.ops.prop.subject_node_ids: outside subgraph")
+            support = {json.dumps(e, sort_keys=True) for e in prop["evidence"]}
+            counter = {json.dumps(e, sort_keys=True) for e in prop["counter_evidence"]}
+            if len(support) < 2 or support & counter:
+                errors.append("$.ops.prop.evidence: two distinct supports, disjoint from counter_evidence required")
+            old = existing.get(operation.get("supersedes", prop["prop_id"]))
+            if old and any(e not in prop["counter_evidence"] for e in old.get("counter_evidence", [])):
+                errors.append("$.ops.prop.counter_evidence: existing counter evidence must be retained")
+            if operation["op"] == "SUPERSEDE":
+                if not operation.get("supersedes") or not prop.get("valid_from"):
+                    errors.append("$.ops: SUPERSEDE requires supersedes and valid_from")
+            elif "supersedes" in operation:
+                errors.append("$.ops: supersedes only applies to SUPERSEDE")
+            if prop["status"] == "superseded" or prop.get("superseded_by"):
+                errors.append("$.ops.prop: supersession is managed by the store")
     if kind == "resolve_entities":
         walk(task_input["candidates"])
         candidates = {c["tmp_id"]: c for c in task_input["candidates"]}

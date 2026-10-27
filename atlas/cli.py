@@ -47,8 +47,9 @@ def main(argv=None):
         parser = tasks.add_parser(name)
         parser.add_argument("--config")
         if name == "make":
-            parser.add_argument("--kind", choices=["extract_entities", "resolve_entities"], required=True)
+            parser.add_argument("--kind", choices=["extract_entities", "resolve_entities", "gen_propositions"], required=True)
             parser.add_argument("--input", help="resolution input JSON with candidates, nodes and documents")
+            parser.add_argument("--node", help="graph node for gen_propositions")
         if name == "list":
             parser.add_argument("--json", action="store_true")
         if name in ("claim", "submit", "validate", "merge"):
@@ -61,9 +62,17 @@ def main(argv=None):
             parser.add_argument("--owner")
     graph = commands.add_parser("graph").add_subparsers(dest="action", required=True)
     graph.add_parser("stats").add_argument("--config")
+    profile = commands.add_parser("profile").add_subparsers(dest="action", required=True)
+    for name in ("list", "correct"):
+        parser = profile.add_parser(name)
+        parser.add_argument("--config")
+        if name == "correct":
+            parser.add_argument("prop_id")
+            parser.add_argument("--verdict", choices=["wrong", "right", "amend"], required=True)
+            parser.add_argument("--note", default="")
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ("tasks", "graph"):
+        if a.cmd in ("tasks", "graph", "profile"):
             return task_command(a)
         cfg = C.load(a.config)
         R.add_paths([p if os.path.isabs(p) else os.path.join(cfg["config_dir"], p)
@@ -99,10 +108,31 @@ def task_command(a):
         store = Store(data_dir)
     try:
         queue = Queue(data_dir, store, cfg.get("tasks", {}).get("forbidden_terms") if cfg else None)
-        if a.action == "make":
+        if a.cmd == "profile":
+            from .profile import correct, propositions, sync_corrections
+            graph = GraphStore(data_dir)
+            try:
+                with queue.locked():
+                    sync_corrections(graph, data_dir)
+                    result = (propositions(graph) if a.action == "list" else
+                              correct(graph, data_dir, a.prop_id, a.verdict, a.note))
+            finally:
+                graph.close()
+        elif a.action == "make":
             from .tasks.queue import read_json
             from pathlib import Path
-            result = queue.make(a.kind, read_json(Path(a.input)) if a.input else None)
+            if a.kind == "gen_propositions":
+                from .profile import snapshot
+                if not a.node or a.input:
+                    raise ValueError("gen_propositions requires --node and uses the live graph snapshot")
+                graph = GraphStore(data_dir)
+                try:
+                    payload = snapshot(graph, store, data_dir, a.node)
+                finally:
+                    graph.close()
+                result = queue.make(a.kind, payload)
+            else:
+                result = queue.make(a.kind, read_json(Path(a.input)) if a.input else None)
         elif a.action == "list": result = queue.list()
         elif a.action == "claim": result = queue.claim(a.task_id, a.owner, a.lease_seconds)
         elif a.action == "submit": result = queue.submit(a.task_id, a.file, a.owner)

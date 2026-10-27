@@ -1,4 +1,4 @@
-"""Atomic, source-checked merges of accepted M2 tasks."""
+"""Atomic, source-checked merges of accepted graph tasks."""
 from dataclasses import asdict
 
 from ..graph.models import Node, Edge
@@ -14,7 +14,17 @@ def records(graph, table):
 
 
 def merge(queue, graph, identifier):
-    with queue.locked(), graph.transaction():
+    from ..profile import sync_corrections
+    with queue.locked():
+        sync_corrections(graph, queue.root.parent)
+        with graph.transaction():
+            result = _merge(queue, graph, identifier)
+            sync_corrections(graph, queue.root.parent)
+            return result
+
+
+def _merge(queue, graph, identifier):
+    with graph.transaction():
         state, path = queue.locate(identifier)
         if state != "accepted":
             raise ValueError("only accepted tasks can be merged")
@@ -23,8 +33,8 @@ def merge(queue, graph, identifier):
             raise ValueError("; ".join(errors))
         task, payload, output = [read_json(path / name) for name in
                                  ("task.json", "input.json", "output.json")]
-        if task["kind"] not in ("extract_entities", "resolve_entities"):
-            raise ValueError("M2 only merges extraction and resolution tasks")
+        if task["kind"] not in ("extract_entities", "resolve_entities", "gen_propositions"):
+            raise ValueError("unsupported merge kind")
         run_id = identity("run", identifier, task["input_hash"])
         previous = graph.get("task_runs", run_id)
         if previous:
@@ -72,6 +82,9 @@ def merge(queue, graph, identifier):
                     graph.put("edges", edge)
                 for evidence in edge["evidence"]:
                     graph.put("evidence", dict(evidence, evidence_id=identity("evidence", evidence)))
+        elif task["kind"] == "gen_propositions":
+            from .propositions import merge_propositions
+            merge_propositions(graph, payload, output, task["created_at"])
         else:
             candidates = {c["tmp_id"]: c for c in payload["candidates"]}
             for op in output["ops"]:
