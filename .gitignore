@@ -1,0 +1,8 @@
+.env
+*.sqlite
+_demo_data/
+_demo_out/
+out/
+data/
+__pycache__/
+*.pyc

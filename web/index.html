@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'">
+<title>ATLAS</title><style>
+body{font:15px/1.6 system-ui,sans-serif;max-width:860px;margin:2em auto;padding:0 1em;color:#222}
+nav button{margin-right:.5em;padding:.3em .8em}nav button.on{background:#222;color:#fff}
+.card{border:1px solid #ddd;border-radius:8px;padding:1em;margin:1em 0}
+.pt{border-left:3px solid #ccc;padding-left:.7em;margin:.5em 0}.pt.turn{border-color:#d80}
+.ts{color:#888;font-size:12px}.corr{color:#b00;font-size:12px}.muted{color:#888}
+</style></head><body>
+<h1>ATLAS</h1><p class="muted" id="meta"></p><nav id="nav"></nav><main id="main"></main>
+<script src="data.js"></script>
+<script>
+const D=window.ATLAS_DATA, esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const R={
+ timeline:v=>v.months.map(m=>`<h3>${m.month}</h3>`+m.items.map(i=>`<div class="pt"><span class="ts">${esc(i.ts)} · ${esc(i.channel)}</span><br>${esc(i.text)}</div>`).join('')).join(''),
+ judgment_lines:v=>`<p class="muted">方法：${esc(v.method)}。一条线一张卡；橙色 = 转折/改口。</p>`+v.cards.map(c=>`<div class="card"><h3>${esc(c.topic)}</h3>
+  <div class="ts">${c.first} → ${c.last} · ${c.n} 次表态 · ${c.turns} 次转折</div>`+
+  c.points.map(p=>`<div class="pt ${p.turn?'turn':''}"><span class="ts">${esc(p.ts)}</span><br>${esc(p.text)}${p.correction?`<div class="corr">更正：${esc(p.correction.note||p.correction.verdict)}</div>`:''}</div>`).join('')+
+  `<p><b>后来：</b>${esc(c.outcome||'（未填写；在 lens 配置 outcomes 中补充）')}</p></div>`).join('')
+};
+if(!D){document.getElementById('main').textContent='没有 data.js：先运行 python -m atlas all --config <你的配置>';}
+else{document.getElementById('meta').textContent=`构建于 ${D.built} · ${D.n_docs} 条文档`;
+ const nav=document.getElementById('nav');
+ const show=i=>{[...nav.children].forEach((b,j)=>b.className=j==i?'on':'');const v=D.views[i];
+  document.getElementById('main').innerHTML=(R[v.view.type]||(x=>`<pre>${esc(JSON.stringify(x,null,1))}</pre>`))(v.view);};
+ D.views.forEach((v,i)=>{const b=document.createElement('button');b.textContent=v.title||v.name;b.onclick=()=>show(i);nav.appendChild(b);});
+ show(0);}
+</script></body></html>
