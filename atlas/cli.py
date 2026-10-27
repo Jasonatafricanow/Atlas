@@ -63,6 +63,8 @@ def main(argv=None):
             parser.add_argument("--parallel", type=int, default=4)
             parser.add_argument("--print-cmd", action="store_true")
             parser.add_argument("--timeout", type=float, default=660)
+            parser.add_argument("--model", help="explicit model id (overrides [runners.<name>].model)")
+            parser.add_argument("--effort", help="reasoning effort, e.g. low (overrides [runners.<name>].effort)")
         if name == "make":
             parser.add_argument("--kind", choices=["extract_entities", "resolve_entities", "gen_propositions", "cluster_lens"], required=True)
             parser.add_argument("--input", help="resolution input JSON with candidates, nodes and documents")
@@ -167,7 +169,7 @@ def task_command(a):
         elif a.action == "list": result = queue.list()
         elif a.action == "run":
             from .tasks.runners import run
-            result = run(queue, a.runner, cfg or {}, a.parallel, a.print_cmd, a.timeout)
+            result = run(queue, a.runner, cfg or {}, a.parallel, a.print_cmd, a.timeout, a.model, a.effort)
         elif a.action == "claim": result = queue.claim(a.task_id, a.owner, a.lease_seconds)
         elif a.action == "submit": result = queue.submit(a.task_id, a.file, a.owner)
         elif a.action == "validate": result = queue.validate(a.task_id)

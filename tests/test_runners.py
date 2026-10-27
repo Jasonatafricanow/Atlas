@@ -183,3 +183,12 @@ class MojibakeTests(unittest.TestCase):
         self.assertTrue(_looks_mojibake('{"text": "????????"}'))
         self.assertTrue(_looks_mojibake('\ufffd'))
         self.assertFalse(_looks_mojibake('{"text": "\u4f5c\u8005? \u662f\u7684"}'))
+
+
+class ModelArgsTest(__import__("unittest").TestCase):
+    def test_flags(self):
+        from atlas.tasks.runners import model_args
+        self.assertEqual(model_args("grok", {}, "m-fast", "low"), ["-m", "m-fast", "--reasoning-effort", "low"])
+        self.assertEqual(model_args("agy", {"runners": {"agy": {"model": "flash-low"}}}), ["--model", "flash-low"])
+        self.assertEqual(model_args("codex", {}, "mini", "low"), ["-m", "mini", "-c", "model_reasoning_effort=low"])
+        self.assertEqual(model_args("cmd", {}, "x", "y"), [])

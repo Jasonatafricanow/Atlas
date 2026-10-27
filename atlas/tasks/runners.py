@@ -62,7 +62,20 @@ def _search_dirs():
     return dirs
 
 
-def command(name, path, config, timeout=600):
+MODEL_FLAGS = {"codex": lambda m, e: (["-m", m] if m else []) + (["-c", f"model_reasoning_effort={e}"] if e else []),
+               "agy": lambda m, e: (["--model", m] if m else []) + (["--effort", e] if e else []),
+               "grok": lambda m, e: (["-m", m] if m else []) + (["--reasoning-effort", e] if e else [])}
+
+
+def model_args(name, config, model=None, effort=None):
+    """Explicit model/effort: CLI args override [runners.<name>] model/effort."""
+    section = config.get("runners", {}).get(name, {})
+    model, effort = model or section.get("model"), effort or section.get("effort")
+    flags = MODEL_FLAGS.get(name)
+    return flags(model, effort) if flags and (model or effort) else []
+
+
+def command(name, path, config, timeout=600, model=None, effort=None):
     template = config.get("runners", {}).get(name, {}).get("cmd", TEMPLATES.get(name))
     if not isinstance(template, list) or not template or any(not isinstance(x, str) for x in template):
         raise ValueError("runner requires a nonempty cmd array")
@@ -74,8 +87,12 @@ def command(name, path, config, timeout=600):
               "prompt_short": "Read PROMPT.md in " + str(path.resolve()) + " and follow it exactly."}
     # Replace only known placeholders, leaving literal JSON braces untouched.
     import re
-    return [re.sub(r"\{(task_dir|python|config_dir|schema|prompt_file|prompt_short|prompt|timeout)\}",
+    argv = [re.sub(r"\{(task_dir|python|config_dir|schema|prompt_file|prompt_short|prompt|timeout)\}",
                    lambda match: values[match[1]], item) for item in template]
+    extra = model_args(name, config, model, effort)
+    if extra and argv and argv[-1] == "-":   # codex reads the prompt from stdin: keep "-" last
+        return argv[:-1] + extra + ["-"]
+    return argv + extra
 
 
 def prompt_text(path):
@@ -147,12 +164,12 @@ def _uses_stdin(name, config):
     return bool(override) if override is not None else name in STDIN_PROMPT
 
 
-def run(queue, name, config, parallel=4, print_cmd=False, timeout=660):
+def run(queue, name, config, parallel=4, print_cmd=False, timeout=660, model=None, effort=None):
     if parallel < 1 or timeout <= 0:
         raise ValueError("parallel and timeout must be positive")
     pending = [record for record in queue.list() if record["state"] == "pending"]
     if print_cmd:
-        return [command(name, queue.locate(r["task_id"])[1], config) for r in pending]
+        return [command(name, queue.locate(r["task_id"])[1], config, timeout, model, effort) for r in pending]
     owner = "runner-" + uuid4().hex
     results = []
     # Claim at most parallel tasks at a time so leases cannot expire waiting
@@ -165,7 +182,7 @@ def run(queue, name, config, parallel=4, print_cmd=False, timeout=660):
                 command(name, queue.locate(identifier)[1], config)  # validate before claim
                 queue.claim(identifier, owner, timeout + 60)
                 path = queue.locate(identifier)[1]
-                argv = command(name, path, config, max(1, timeout - 30))
+                argv = command(name, path, config, max(1, timeout - 30), model, effort)
                 stdin_text = prompt_text(path) if _uses_stdin(name, config) else None
                 jobs[pool.submit(execute, argv, path, name in ("agy", "grok"), timeout, stdin_text)] = (identifier, path)
             for future in as_completed(jobs):
