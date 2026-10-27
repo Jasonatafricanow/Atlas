@@ -139,12 +139,13 @@ class Queue:
             raise ValueError("; ".join(errors))
         doc_ids = sorted(d["id"] for d in payload["documents"])
         # Candidate/graph snapshots can change without changing source documents.
-        version = "3-" + digest(payload)[:16]
-        identifier = task_id(kind, doc_ids, schema_version="3", prompt_version=version)
+        schema_version = "4" if kind == "cluster_lens" else "3"
+        version = schema_version + "-" + digest(payload)[:16]
+        identifier = task_id(kind, doc_ids, schema_version=schema_version, prompt_version=version)
         with self.locked():
             if any(r["task_id"] == identifier for r in self.list()):
                 return [identifier]
-            envelope = dict(task_id=identifier, kind=kind, schema_version="3", prompt_version=version,
+            envelope = dict(task_id=identifier, kind=kind, schema_version=schema_version, prompt_version=version,
                             doc_ids=doc_ids, input_hash=digest(payload),
                             created_at=datetime.now(timezone.utc).isoformat())
             temporary = self.root / "pending" / ("." + uuid4().hex)
@@ -286,6 +287,6 @@ def instructions_for(kind):
     return common + {
         "extract_entities": "Include a speaker person entity (我 = owner). Connect every entity to at least one other when supported; target >= 1.5 relations per entity, using generic verb-like relation types. Do not invent links to meet density targets. Extract one statement per distinct opinion, prediction, plan or preference, with speaker-relevant stance.\n",
         "gen_propositions": "Use >=2 distinct support pointers from different documents when possible; otherwise lower confidence. Calibrate confidence to evidence breadth and counter evidence.\n",
-        "cluster_lens": "Group related statements into topic timelines (one line per real topic such as a stock, a trading rule, a life plan; aim for several points per line; do not make one giant line). topic MUST be a node id taken from the about lists of the line's statements; put a human title in title. Refer only to input statement_ids, in time order. Each point needs shift first/same/strengthen/weaken/reverse/new_angle and a reason. Use unknown outcome unless later input statements support an outcome; cite those IDs in outcome_statement_ids and explain in outcome_reason. Do not infer a reversal merely from different speakers.\n",
+        "cluster_lens": "Assign EVERY input statement and proposition to exactly one line. Merge aggressively by underlying topic (a stock, a sector, a trading rule, a life plan, a person); most lines should have >= 3 points, singletons only when truly isolated. Do not invent points to meet density targets. topic MUST be a node id from the about lists; about_names gives node names. Use the short ref (s1, s2, ...) in ref or statement_id; full statement_ids also work. Order by source time. The first point has shift first; label every later point vs the previous point on that line as same/strengthen/weaken/reverse/new_angle with a short reason in the source language. Set outcome confirmed/refuted/mixed when a later related statement on the same line shows what happened; cite its ref or statement_id in outcome_statement_ids and explain in outcome_reason. Otherwise use unknown. Report unassigned_count (target zero). Do not infer a reversal merely from different speakers.\n",
         "resolve_entities": "Preserve source-language names and explain every operation.\n",
     }.get(kind, "")

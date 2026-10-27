@@ -30,61 +30,78 @@ def make_lines(queue, graph):
         size += len(pair[1]["text"])
     if batch:
         batches.append(batch)
+    nodes = {n["node_id"]: n["name"] for n in records(graph, "nodes")}
     made = []
     for batch in batches:
         ids = {e["doc_id"] for _, r in batch for e in r.get("evidence", []) + r.get("counter_evidence", [])}
-        payload = {"documents": [documents[i] for i in sorted(ids)],
-                   "statements": [r for kind, r in batch if kind == "statements"],
-                   "propositions": [r for kind, r in batch if kind == "propositions"],
-                   "existing_lines": records(graph, "lines")}
+        payload = {"documents": [{"id": i} for i in sorted(ids)], "statements": [], "propositions": [],
+                   "existing_lines": [{k: line[k] for k in ("line_id", "title", "topic_node_id")}
+                                      for line in records(graph, "lines")]}
+        for index, (kind, record) in enumerate(batch, 1):
+            compact = {key: record.get(key) for key in ("statement_id", "ts", "speaker", "text", "about")}
+            compact.update(ref=f"s{index}", about_names={n: nodes.get(n, n) for n in record["about"]},
+                           sensitive=record.get("sensitive", False))
+            payload[kind].append(compact)
         made.extend(queue.make("cluster_lens", payload))
     return made
 
 
-def validate_lines(output, payload):
+def repair_lines(output, payload):
+    """Normalize model references and repair points without inventing source facts."""
+    if not isinstance(output, dict) or not isinstance(output.get("lines"), list):
+        return []
     sources = {s["statement_id"]: s for s in payload["statements"] + payload["propositions"]}
-    errors = []
-    seen = set()
-    for line in output["lines"]:
-        if line["line_id"] in seen:
-            errors.append("duplicate line identity")
-        seen.add(line["line_id"])
-        ids = [p["statement_id"] for p in line["timeline"]]
-        if len(set(ids)) != len(ids) or any(i not in sources for i in ids):
-            errors.append("timeline needs unique input statement_ids")
+    refs = {s["ref"]: i for i, s in sources.items() if s.get("ref")}
+    def resolve(value):
+        return value if isinstance(value, str) and value in sources else refs.get(value) if isinstance(value, str) else None
+    diagnostics = []
+    assigned = set()
+    for number, line in enumerate(output["lines"]):
+        if not isinstance(line, dict) or not isinstance(line.get("timeline"), list):
             continue
-        expected = sorted(ids, key=lambda i: (time_key(sources[i].get("ts")), i))
-        if ids != expected:
-            errors.append("timeline must be in source time order (unknown first)")
-        if not any(line["topic"] in sources[i]["about"] for i in ids):
-            # Repair instead of rejecting: anchor the line on its most frequent about node.
+        points = []
+        for index, point in enumerate(line["timeline"]):
+            identifier = resolve(point.get("statement_id", point.get("ref"))) if isinstance(point, dict) else None
+            if not identifier or identifier in assigned:
+                diagnostics.append(f"$.lines[{number}].timeline[{index}]: unknown or duplicate reference dropped")
+                continue
+            point.pop("ref", None)
+            point["statement_id"] = identifier
+            points.append(point)
+            assigned.add(identifier)
+        points.sort(key=lambda p: (time_key(sources[p["statement_id"]].get("ts")), p["statement_id"]))
+        line["timeline"] = points
+        ids = {p["statement_id"] for p in points}
+        for index, point in enumerate(points):
+            if index == 0:
+                point["shift"] = "first"
+            elif point.get("shift") == "first":
+                point["shift"] = "same"
+            source = sources[point["statement_id"]]
+            support = point.get("outcome_statement_ids", [])
+            support = [resolve(i) for i in support] if isinstance(support, list) else [None]
+            valid = (point.get("outcome") in ("confirmed", "refuted", "mixed")
+                     and isinstance(point.get("outcome_reason"), str) and point["outcome_reason"].strip()
+                     and support and all(i in ids and time_key(source.get("ts"))[0]
+                         and time_key(sources[i].get("ts")) > time_key(source.get("ts"))
+                         and set(source["about"]) & set(sources[i]["about"]) for i in support))
+            if valid:
+                point["outcome_statement_ids"] = list(dict.fromkeys(support))
+            else:
+                point.update(outcome="unknown", outcome_statement_ids=[], outcome_reason="")
+        if points and not any(line.get("topic") in sources[i]["about"] for i in ids):
             counts = {}
             for i in ids:
-                for n in sources[i]["about"]:
-                    counts[n] = counts.get(n, 0) + 1
+                for node in sources[i]["about"]:
+                    counts[node] = counts.get(node, 0) + 1
             if counts:
-                line.setdefault("topic_label", line["topic"])
                 line["topic"] = max(sorted(counts), key=counts.get)
-        # Grouping is a semantic judgment by the agent; statements need not share an
-        # about node (e.g. two different stocks discussed under one trading rule).
-        for index, point in enumerate(line["timeline"]):
-            source = sources[point["statement_id"]]
-            if (index == 0) != (point["shift"] == "first"):
-                errors.append("only the first point has shift first")
-            support = point["outcome_statement_ids"]
-            if point["outcome"] == "unknown":
-                if support:
-                    errors.append("unknown outcome must not claim supporting statements")
-                continue
-            if not support or not point["outcome_reason"].strip():
-                errors.append("known outcome requires later support and an explanation")
-            for identifier in support:
-                later = sources.get(identifier)
-                if (not later or not time_key(source.get("ts"))[0] or not time_key(later.get("ts"))[0]
-                    or time_key(later["ts"]) <= time_key(source["ts"])
-                    or not set(source["about"]).intersection(later["about"])):
-                    errors.append("outcome support must be a later related input statement")
-    return errors
+    return diagnostics
+
+
+def validate_lines(output, payload):
+    repair_lines(output, payload)
+    return ["line needs at least one valid point" for line in output["lines"] if not line["timeline"]]
 
 
 def merge_lines(graph, payload, output, task_id):

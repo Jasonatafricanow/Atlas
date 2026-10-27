@@ -59,6 +59,9 @@ def check_schema(value, schema, path="$", errors=None):
 def validate_output(kind, output, task_input, store):
     from .evidence import normalize_output
     quote_errors = normalize_output(output, task_input, store)
+    if kind == "cluster_lens":
+        from .lines import repair_lines
+        repair_lines(output, task_input)
     errors = check_schema(output, schema_for(kind + ".output"))
     if errors:
         return errors
@@ -154,6 +157,9 @@ def accept_items(kind, output, task_input, store, edges=None):
     """Keep independently valid items; return indexed diagnostics and counts."""
     from .evidence import normalize_output
     quote_errors = normalize_output(output, task_input, store)
+    if kind == "cluster_lens":
+        from .lines import repair_lines
+        quote_errors += repair_lines(output, task_input)
     schema = schema_for(kind + ".output")
     groups = {"extract_entities": ["entities", "relations", "statements"],
               "resolve_entities": ["ops"], "gen_propositions": ["ops"],
@@ -245,4 +251,9 @@ def accept_items(kind, output, task_input, store, edges=None):
     total = sum(len(output[g]) for g in groups)
     if not accepted and not errors:
         errors.append("$: no valid items")
-    return kept, errors, not accepted, {"accepted": accepted, "dropped": total - accepted}
+    counts = {"accepted": accepted, "dropped": total - accepted}
+    if kind == "cluster_lens":
+        assigned = {p["statement_id"] for line in kept["lines"] for p in line["timeline"]}
+        counts["unassigned"] = len({s["statement_id"] for s in task_input["statements"] + task_input["propositions"]} - assigned)
+        kept["unassigned_count"] = counts["unassigned"]
+    return kept, errors, not accepted, counts

@@ -58,17 +58,32 @@
                 },
                 "outcome_reason": {
                   "type": "string"
+                },
+                "ref": {
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "required": [
-                "statement_id",
                 "shift",
                 "reason",
                 "outcome",
                 "outcome_statement_ids",
                 "outcome_reason"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "statement_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "ref"
+                  ]
+                }
+              ]
             },
             "minItems": 1
           }
@@ -81,6 +96,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "unassigned_count": {
+      "type": "integer",
+      "minimum": 0
     }
   },
   "required": [

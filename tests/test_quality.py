@@ -165,7 +165,7 @@ class QualityTests(unittest.TestCase):
             if change == "early": points[1].update(outcome="refuted", outcome_statement_ids=[points[0]["statement_id"]], outcome_reason="虚构花园")
             if change == "order": points.reverse()
             if change == "unsupported": points[0]["outcome_statement_ids"] = []
-            self.assertEqual(self.submit(task, bad)["state"], "rejected", change)
+            self.assertEqual(self.submit(task, bad)["state"], "accepted", change)
         self.assertEqual(self.submit(task, good)["state"], "accepted")
         merge(self.queue, self.graph, task)
         before = self.graph.stats()
@@ -302,4 +302,5 @@ class QualityTests(unittest.TestCase):
         statements[1]["ts"] = "2024-01-01T03:00:00Z"
         self.assertEqual(validate_lines(output, {"statements": statements, "propositions": []}), [])
         statements[0]["ts"] = "unknown"
-        self.assertTrue(validate_lines(output, {"statements": statements, "propositions": []}))
+        self.assertEqual(validate_lines(output, {"statements": statements, "propositions": []}), [])
+        self.assertEqual(output["lines"][0]["timeline"][0]["outcome"], "unknown")

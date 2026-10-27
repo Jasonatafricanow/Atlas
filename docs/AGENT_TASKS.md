@@ -127,7 +127,7 @@ idempotency. Live graph changes that make an accepted operation stale still abor
 its transaction rather than silently overwrite newer state.
 
 `tasks make --kind cluster_lens` snapshots persisted statements and active
-propositions (with source IDs, time, speaker, text, about, and evidence). It makes
+propositions (with source IDs, short refs, time, speaker, text, about node IDs and names). It makes
 batches of at most `[tasks].lines_batch` records (default 60, including propositions)
 and the configured character target; one oversized
 record remains intact. Empty graphs produce no tasks. Submit JSON of this shape:
@@ -138,7 +138,7 @@ record remains intact. Empty graphs produce no tasks. Submit JSON of this shape:
  "outcome":"unknown","outcome_statement_ids":[],"outcome_reason":""}]}]}
 ```
 
-Points reference input IDs, never agent-supplied dates or speakers. Shifts are
+Points reference input IDs or short refs, never agent-supplied dates or speakers. Shifts are
 `first`, `same`, `strengthen`, `weaken`, `reverse`, `new_angle`; each needs a reason.
 Known outcomes (`confirmed`, `refuted`, `mixed`) need an explanation and IDs of
 strictly later related input statements. Otherwise use `unknown`. These checks
@@ -213,3 +213,47 @@ precedence over names. Empty graphs still produce no cluster tasks. `lines_batch
 must be a positive integer; character limits still apply and oversized single records
 stay intact. Existing task directories are not rewritten when new version-3 tasks
 are created; no historical graph migration is performed.
+
+
+## M8 compact judgment lines and repair
+
+New `cluster_lens` tasks use schema/prompt version 4; other task kinds remain at
+version 3. Existing task directories are preserved. Each batch assigns unique
+`s1`, `s2`, ... refs across statements AND propositions. Inputs retain canonical
+`statement_id`, `ts`, `speaker`, `text`, `about` node IDs, an `about_names` mapping
+and sensitivity. Documents contain only IDs and existing lines contain only
+identity/title/topic summaries; evidence pointers remain in the graph and are
+projected from source records at display time.
+
+Timeline points may use `ref` instead of `statement_id`, or put the short ref in
+`statement_id`. Outcome support IDs also accept short refs. Canonical IDs take
+precedence. ATLAS resolves these before schema validation, drops unknown points,
+keeps the first occurrence of each source across lines, sorts by source time
+(unknown first, canonical ID as tie-break), forces the first shift to `first`,
+and changes later `first` labels to `same`. A line with no retained points is
+dropped; a task with no surviving lines is rejected. Malformed envelopes and
+structurally invalid line metadata still fail their existing schema checks.
+
+Invalid outcomes become `unknown` with empty support and explanation. Known
+outcomes require an explanation and strictly later, related input records on the
+same line; unknown dates cannot establish support. These checks establish source
+reference and time grounding, not semantic truth. Corrections still invalidate
+outcome support at display time. Original submissions remain in attempts.
+
+Instructions request EVERY input record exactly once, aggressive grouping by
+underlying topic, normally at least three points per line, and singletons only
+when isolated. Later shifts compare with the previous point and give a short
+reason in the source language. Outcomes should be labeled when later records
+show what happened. Density is a prompt target, never permission to invent facts.
+The optional agent `unassigned_count` is not trusted: `accepted.json` receives the
+computed count, and CLI / `validation.json` report it as `counts.unassigned`,
+including propositions. Missing coverage does not reject otherwise valid lines.
+
+The lens coalesces accepted lines across batches when topic node IDs match or
+normalized character-bigram title Jaccard similarity is at least 0.6 (Unicode
+NFKC, case folding, alphanumeric characters only). Points are deduplicated and
+sorted again. Batch-boundary shifts not evaluated by an agent stay unknown.
+Fallback hub exclusion is unchanged: people and nodes above the existing
+`max(3, 25% of source records)` threshold do not join fallback groups. Empty
+graphs remain empty. All M8 tests use fictional local records without network
+or external agents; run the unit suite and leak scanner with the commands above.

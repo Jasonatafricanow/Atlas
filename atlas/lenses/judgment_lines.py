@@ -1,6 +1,16 @@
 """Project accepted judgments; group unclassified sources without inventing shifts."""
+import unicodedata
+
 from . import Lens
 from ..chat import time_key
+
+
+def similar_titles(left, right):
+    def grams(text):
+        text = "".join(c for c in unicodedata.normalize("NFKC", text).casefold() if c.isalnum())
+        return {text[i:i+2] for i in range(max(1, len(text)-1))} if text else set()
+    a, b = grams(left), grams(right)
+    return bool(a | b) and len(a & b) / len(a | b) >= 0.6
 
 
 def grouped_lines(graph):
@@ -41,6 +51,8 @@ def grouped_lines(graph):
     hubs = {n for n, c in freq.items() if c > limit or nodes.get(n, {}).get("type") == "person"}
     for group in groups:
         group["agent"] = True
+        group["topics"] = {group.get("topic_node_id")} - {None, ""}
+        group["titles"] = {group.get("title", "")}
     fallback = graph.get("statements", []) or list(sources.values())
     for source in fallback:
         identifier = source["statement_id"]
@@ -54,7 +66,12 @@ def grouped_lines(graph):
         index = 0
         while index < len(merged):
             other = merged[index]
-            if (not (group["agent"] and other["agent"])) and (group["about"] & other["about"]) - hubs:
+            both_agents = group["agent"] and other["agent"]
+            shared_topic = group.get("topics", set()) & other.get("topics", set())
+            shared_title = any(similar_titles(a, b) for a in group.get("titles", []) for b in other.get("titles", []))
+            if (both_agents and (shared_topic or shared_title)) or (not both_agents and (group["about"] & other["about"]) - hubs):
+                group["topics"] = group.get("topics", set()) | other.get("topics", set())
+                group["titles"] = group.get("titles", set()) | other.get("titles", set())
                 group["about"].update(other["about"])
                 group["points"] = {**group["points"], **other["points"]}
                 group["agent"] = group["agent"] or other["agent"]
