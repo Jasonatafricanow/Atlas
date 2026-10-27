@@ -28,7 +28,7 @@ const showSensitive=()=>document.getElementById('sensitive').checked;
 const visibleNode=id=>nodes.has(id)&&(showSensitive()||!nodes.get(id).sensitive);
 const visibleProp=p=>p&&(showSensitive()||!p.sensitive)&&p.subject_node_ids.every(visibleNode);
 const visibleEdge=e=>(showSensitive()||!e.sensitive)&&visibleNode(e.src)&&visibleNode(e.dst);
-const labels={person:'人物',concept:'概念',place:'地点',event:'事件',instrument:'标的',topic:'主题',fact:'事实',opinion:'观点',plan:'计划',preference:'偏好',proposed:'待确认',confirmed:'已确认',rejected:'已否定',superseded:'已取代',first:'首次',same:'维持',strengthen:'加强',weaken:'减弱',reverse:'转向',new_angle:'新角度',refuted:'被反驳',mixed:'部分支持',unknown:'未知'};
+const labels={person:'人物',concept:'概念',place:'地点',event:'事件',instrument:'标的',topic:'主题',fact:'事实',opinion:'观点',plan:'计划',preference:'偏好',proposed:'待确认',confirmed:'已确认',rejected:'已否定',superseded:'已取代',first:'首次',same:'维持',strengthen:'加强',weaken:'减弱',reverse:'转向',new_angle:'新角度',unclear:'未判明',refuted:'被反驳',mixed:'部分支持',unknown:'未知'};
 const label=v=>labels[v]||v||'未评估';
 const visiblePoint=p=>(showSensitive()||!p.sensitive)&&(p.about||[]).every(visibleNode);
 const empty='<p class="muted">暂无可显示的记录。</p>';
@@ -62,6 +62,11 @@ function render(){
  else lensView(D.lenses[Number(tab)]);
  const intro=tab==='graph'?'如何阅读：选择节点查看关系、时间与证据指针。如何纠正：在关联命题中点击“对 / 不对 / 补充”，下载纠正片段。':tab==='profile'?'如何阅读：置信度受证据数量、时间跨度和反证约束，不代表事实已被证实。如何纠正：选择“对 / 不对 / 补充”，下载后追加至纠正日志。':D.lenses[Number(tab)].view.type==='judgment_lines'?'如何阅读：每个主题按时间串联发言；变化和后续结果是带来源引用的判断，未评估不代表立场相同。如何纠正：命题可展开纠正；发言归属或判断线错误需修正源记录并重新生成。':'如何阅读：按时间查看命题；未知时间保留未知。如何纠正：使用命题下的纠正按钮并导出片段。';
  main.insertAdjacentHTML('afterbegin',`<p class="card">${esc(intro)}</p>`);
+ const legacy=D.legacy||{nodes:[],edges:[]};
+ if(tab==='graph'&&(legacy.nodes.length||legacy.edges.length)){
+  const names=new Map(legacy.nodes.map(n=>[n.id,n.name||n.id]));
+  main.insertAdjacentHTML('beforeend',`<details class="card"><summary>旧版参考</summary><p>source: legacy / status: reference</p>${legacy.nodes.map(n=>`<p>${esc(n.name||n.id)} ${esc(n.type||'')}</p>`).join('')}${legacy.edges.map(e=>`<p>${esc(names.get(e.s)||e.s)} → ${esc(e.r)} → ${esc(names.get(e.t)||e.t)} ${esc(e.date||'')} ${esc(e.legacy_relation||'')}</p>`).join('')}</details>`);
+ }
  // Hidden sensitive corrections must not remain visible in the preview.
  const rows=corrections.filter(r=>visibleProp(props.get(r.prop_id)));
  document.getElementById('export').hidden=!rows.length;

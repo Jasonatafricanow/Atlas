@@ -75,8 +75,9 @@ def repair_lines(output, payload):
         for index, point in enumerate(points):
             if index == 0:
                 point["shift"] = "first"
-            elif point.get("shift") == "first":
-                point["shift"] = "same"
+            elif point.get("shift") not in ("same", "strengthen", "weaken", "reverse", "new_angle", "unclear"):
+                point["shift"] = "unclear"
+                diagnostics.append(f"$.lines[{number}].timeline[{index}]: shift repaired to unclear")
             source = sources[point["statement_id"]]
             support = point.get("outcome_statement_ids", [])
             support = [resolve(i) for i in support] if isinstance(support, list) else [None]

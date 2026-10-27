@@ -57,6 +57,9 @@
           },
           "meta": {
             "type": "object"
+          },
+          "numbered_text": {
+            "type": "string"
           }
         },
         "required": [

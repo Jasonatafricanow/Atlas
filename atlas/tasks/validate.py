@@ -253,6 +253,7 @@ def accept_items(kind, output, task_input, store, edges=None):
         errors.append("$: no valid items")
     counts = {"accepted": accepted, "dropped": total - accepted}
     if kind == "cluster_lens":
+        counts["shift_repairs"] = sum("shift repaired to unclear" in issue for issue in quote_errors)
         assigned = {p["statement_id"] for line in kept["lines"] for p in line["timeline"]}
         counts["unassigned"] = len({s["statement_id"] for s in task_input["statements"] + task_input["propositions"]} - assigned)
         kept["unassigned_count"] = counts["unassigned"]

@@ -45,6 +45,28 @@ def resolve_quote(pointer, documents, used):
                 quote_hash=hashlib.sha256(text[start:end].encode("utf-8")).hexdigest()[:12])
 
 
+def numbered_text(text):
+    """Display-only labels; canonical text and offsets stay unchanged."""
+    return "\n".join(f"L{i}: {line}" for i, line in enumerate(text.splitlines(), 1))
+
+
+def resolve_lines(pointer, documents):
+    doc_id, bounds = pointer.get("doc_id"), pointer.get("lines")
+    text = documents.get(doc_id) if isinstance(doc_id, str) else None
+    if (set(pointer) != {"doc_id", "lines"} or text is None
+            or not isinstance(bounds, list) or len(bounds) != 2
+            or not all(type(n) is int for n in bounds)):
+        return None
+    lines = text.splitlines(keepends=True)
+    first, last = bounds
+    if not 1 <= first <= last <= len(lines) or last - first >= 6:
+        return None
+    start = sum(map(len, lines[:first - 1]))
+    end = sum(map(len, lines[:last]))
+    return dict(doc_id=doc_id, span=[start, end],
+                quote_hash=hashlib.sha256(text[start:end].encode("utf-8")).hexdigest()[:12])
+
+
 def normalize_output(output, task_input, store):
     """Mutate evidence only; diagnostics never contain source quotations."""
     documents = {}
@@ -71,10 +93,23 @@ def normalize_output(output, task_input, store):
                 if key in ("evidence", "counter_evidence") and isinstance(items, list):
                     kept = []
                     for index, pointer in enumerate(items):
+                        if isinstance(pointer, dict) and "lines" in pointer:
+                            pointer = resolve_lines(pointer, documents)
+                            if pointer is None:
+                                issues.append(f"{path}.{key}[{index}]: invalid line range removed")
+                                continue
                         if isinstance(pointer, dict) and "quote" in pointer:
                             pointer = resolve_quote(pointer, documents, used)
                             if pointer is None:
                                 issues.append(f"{path}.{key}[{index}]: unresolved quote removed")
+                                continue
+                        if isinstance(pointer, dict) and "span" in pointer:
+                            doc_id, span = pointer.get("doc_id"), pointer["span"]
+                            text = documents.get(doc_id) if isinstance(doc_id, str) else None
+                            if (text is None or not isinstance(span, list) or len(span) != 2
+                                    or not all(type(n) is int for n in span)
+                                    or not 0 <= span[0] < span[1] <= len(text)):
+                                issues.append(f"{path}.{key}[{index}]: invalid source span removed")
                                 continue
                         kept.append(pointer)
                     value[key] = kept

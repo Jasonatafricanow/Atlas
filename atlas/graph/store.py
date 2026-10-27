@@ -23,6 +23,8 @@ class GraphStore:
         for table in TABLES:
             self.db.execute(f"CREATE TABLE IF NOT EXISTS {table}(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS ops_log(seq INTEGER PRIMARY KEY, observed_at TEXT NOT NULL, op TEXT NOT NULL, table_name TEXT NOT NULL, record_id TEXT NOT NULL, before_json TEXT, after_json TEXT)")
+        for kind in ("nodes", "edges"):
+            self.db.execute(f"CREATE TABLE IF NOT EXISTS legacy_{kind}(id TEXT PRIMARY KEY, data TEXT NOT NULL)")
         self.db.commit()
 
     def close(self):

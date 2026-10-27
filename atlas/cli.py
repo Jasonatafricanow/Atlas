@@ -6,13 +6,16 @@ from .store import Store
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 def ingest(cfg):
+    from .tasks.guard import FilterCounter, LOG
+    counter = FilterCounter()
     st = Store(cfg["data_dir"])
     for src in cfg.get("sources", []):
         A = R.load(src["adapter"], R.BUILTIN_ADAPTERS)
         opts = dict(src.get("options", {}))
         if "path" in opts and not os.path.isabs(opts["path"]):
             opts["path"] = os.path.join(cfg["data_dir"], opts["path"])
-        print(f"ingest {src['adapter']}: {st.upsert(A(**opts).read())} docs")
+        print(f"ingest {src['adapter']}: {st.upsert(A(**opts).read(), counter)} docs")
+    LOG.warning("credential filter: %d lines in %d documents", counter.lines, counter.documents)
     return st
 
 def build(cfg, st=None):
@@ -23,6 +26,8 @@ def build(cfg, st=None):
     graph = GraphStore(cfg["data_dir"])
     try:
         sync_corrections(graph, cfg["data_dir"])
+        from .seed import reference_rows
+        legacy = reference_rows(graph)
         snapshot = {table: [json.loads(row[0]) for row in graph.db.execute(
             f"SELECT data FROM {table} ORDER BY id")]
             for table in ("nodes", "edges", "propositions", "statements", "lines")}
@@ -40,7 +45,7 @@ def build(cfg, st=None):
         views.append({"name": L.get("id", lens.name), "title": L.get("title", lens.title), "view": lens.build(docs)})
     out = cfg["out_dir"]; os.makedirs(out, exist_ok=True)
     data = {"atlas": __version__, "built": datetime.datetime.now().isoformat(timespec="seconds"),
-            "n_docs": len(docs), **snapshot, "lenses": views}
+            "n_docs": len(docs), **snapshot, "legacy": legacy, "lenses": views}
     with open(os.path.join(out, "atlas.json"), "w", encoding="utf-8") as stream:
         json.dump(data, stream, ensure_ascii=False, indent=1)
     # data.js lets index.html work from file:// without fetch
@@ -54,6 +59,10 @@ def main(argv=None):
     commands = ap.add_subparsers(dest="cmd", required=True)
     for name in ("ingest", "build", "all"):
         commands.add_parser(name).add_argument("--config", required=True)
+    seed = commands.add_parser("seed").add_subparsers(dest="action", required=True)
+    importer = seed.add_parser("import")
+    importer.add_argument("--file", required=True)
+    importer.add_argument("--config", required=True)
     tasks = commands.add_parser("tasks").add_subparsers(dest="action", required=True)
     for name in ("make", "list", "claim", "submit", "validate", "merge", "reap", "run"):
         parser = tasks.add_parser(name)
@@ -96,6 +105,18 @@ def main(argv=None):
         if a.cmd in ("tasks", "graph", "profile"):
             return task_command(a)
         cfg = C.load(a.config)
+        if a.cmd == "seed":
+            from .graph.store import GraphStore
+            from .seed import import_seed
+            with open(a.file, encoding="utf-8") as stream:
+                payload = json.load(stream)
+            graph = GraphStore(cfg["data_dir"])
+            try:
+                result = import_seed(graph, payload, cfg.get("seed", {}).get("relation_synonyms"))
+            finally:
+                graph.close()
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
         R.add_paths([p if os.path.isabs(p) else os.path.join(cfg["config_dir"], p)
                      for p in cfg.get("plugins", {}).get("paths", [])])
         if a.cmd == "ingest": ingest(cfg)
@@ -129,7 +150,7 @@ def task_command(a):
         store = Store(data_dir)
     try:
         options = cfg.get("tasks", {}) if cfg else {}
-        queue = Queue(data_dir, store, options.get("forbidden_terms"), options.get("batch_docs", 50), options.get("batch_chars", 40000), options.get("lines_batch", 60))
+        queue = Queue(data_dir, store, options.get("forbidden_terms"), options.get("batch_docs", 50), options.get("batch_chars", 40000), options.get("lines_batch", 60), include_legacy=options.get("include_legacy", False))
         if a.cmd == "profile":
             from .profile import correct, propositions, sync_corrections
             graph = GraphStore(data_dir)

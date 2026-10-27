@@ -4,7 +4,8 @@ ATLAS is an offline graph and correctable profile shell. Task work lives only in
 `ATLAS_DATA_DIR/work/{pending,claimed,submitted,accepted,rejected}/<task_id>/`.
 A task directory contains its envelope, input, output schema and instructions;
 claiming adds a lease, submission adds output and validation errors when needed.
-Use the task directory's schema as authority. Prefer `{doc_id, quote}` evidence:
+Use the task directory's schema as authority. Prefer `{doc_id, lines: [start, end]}`
+evidence (see M9 below). The older `{doc_id, quote}` form is also supported:
 copy an exact, nonblank excerpt of at most 60 Unicode characters. Agents need not
 compute hashes. ATLAS converts quotes to `{doc_id, span: [start,end], quote_hash}`
 using original character offsets (end exclusive) and the first 12 hexadecimal
@@ -27,8 +28,7 @@ suppressed propositions cannot be revived by an agent.
 Runner commands come from `[runners.<name>] cmd=[...]`. Use `--print-cmd` to
 inspect templates; tests use only `examples/tasks_demo/fake_agent.py` with
 `--runner cmd`. Do not invoke external agents or paid APIs during acceptance.
-Credential matches are replaced with `[CREDENTIAL]`; logs report line numbers,
-not matched values. This is separate from the repository leak scanner.
+Credential matches are replaced with `[CREDENTIAL]`; ingest logs one aggregate line count and affected-document count, never matched values. This is separate from the repository leak scanner.
 
 ## Reproduce the fictional M5 page (PowerShell, repository root)
 
@@ -230,7 +230,7 @@ Timeline points may use `ref` instead of `statement_id`, or put the short ref in
 precedence. ATLAS resolves these before schema validation, drops unknown points,
 keeps the first occurrence of each source across lines, sorts by source time
 (unknown first, canonical ID as tie-break), forces the first shift to `first`,
-and changes later `first` labels to `same`. A line with no retained points is
+and, as of M9, repairs missing or invalid later shifts to `unclear`. A line with no retained points is
 dropped; a task with no surviving lines is rejected. Malformed envelopes and
 structurally invalid line metadata still fail their existing schema checks.
 
@@ -257,3 +257,77 @@ Fallback hub exclusion is unchanged: people and nodes above the existing
 `max(3, 25% of source records)` threshold do not join fallback groups. Empty
 graphs remain empty. All M8 tests use fictional local records without network
 or external agents; run the unit suite and leak scanner with the commands above.
+
+## M9 line citations, guard counters, and legacy references
+
+New extraction, proposition and clustering tasks use schema/prompt version 5.
+Earlier task directories remain intact. Extraction and proposition documents carry
+both unchanged canonical `text` and display-only `numbered_text` (`L1: ...`, etc.).
+Cite `{ "doc_id": "fiction", "lines": [1, 2] }`: line numbers are 1-based,
+inclusive, and limited to six lines. Line boundaries follow Python `splitlines`;
+canonical spans include the final selected line's newline when present, preserving
+CRLF and Unicode offsets. ATLAS computes span/hash pointers against the stored text.
+Unknown documents or invalid line ranges remove that pointer with value-free
+indexed diagnostics. Independent valid items survive; no valid items rejects the
+task. Existing quotation and span/hash forms still work. Propositions still need
+two distinct supports, retained counter evidence, and correction precedence.
+
+Extraction requests every speaker's opinions, judgments, predictions, plans,
+decisions and preferences (target one per 3-4 substantive messages), using exact
+source speaker names and source-language paraphrases rather than copied statements.
+Targets do not authorize invented records or inferred speakers.
+
+`sanitize(value, counter=None)` leaves identifier values (`id`, `ids`, `*_id`,
+`*_ids`, including nested metadata) unchanged. Other strings remain filtered.
+`FilterCounter.lines` counts affected lines across filtered text fields and
+`FilterCounter.documents` counts affected input documents during ingestion.
+Ingest emits exactly one `credential filter: N lines in M documents` summary
+across all sources, including zero hits. It never logs matched values.
+
+Every later cluster point requires one of: `same` (unchanged), `strengthen`
+(more conviction/support), `weaken` (less), `reverse` (opposite position),
+`new_angle` (different aspect), `unclear` (cannot determine). The first point is
+`first`. Missing/invalid later shifts become `unclear`; `counts.shift_repairs`
+reports repairs for that validation pass. The UI labels `unclear` as 未判明.
+
+Import only explicitly selected reference files:
+
+```powershell
+$env:ATLAS_DATA_DIR = "$PWD/_demo_out/m9-data"
+$env:ATLAS_OUT_DIR = "$PWD/_demo_out/m9-site"
+C:\Python314\python.exe -m atlas seed import --file _demo_out/fictional-seed.json --config examples/atlas.config.example.toml
+```
+
+Input shape: `{"nodes":[{"id":"a","name":"Fictional garden"},{"id":"b"}],
+"edges":[{"s":"a","t":"b","r":"supports"}]}`. Node IDs must be unique
+strings and endpoints must occur in the import; names/types and edge dates are
+optional. Dates stay absent when not supplied. Import is atomic and idempotent for
+identical input. References live in separate `legacy_nodes`/`legacy_edges` tables
+with `source="legacy"`, `status="reference"`; they cannot collide or merge with
+built graph records, contribute to graph stats, or enter graph task snapshots.
+`atlas build` exports them under `legacy` and renders a separate collapsed 旧版参考
+section. They carry no fabricated evidence or observations.
+
+Relation normalization folds Unicode width, strips whitespace, lowercases, and
+converts punctuation/whitespace runs to underscores. Canonical generic relations:
+`related_to`, `knows`, `located_in`, `part_of`, `works_on`, `supports`, `opposes`,
+`owns`, `uses`. Built graph extraction itself retains its open relation vocabulary.
+Small default synonyms include `related`, `located at`, `member of`, `work on`,
+`support`, `oppose`. Configure additional synonyms with canonical targets:
+
+```toml
+[seed.relation_synonyms]
+"collaborates" = "works_on"
+
+[tasks]
+include_legacy = false
+```
+
+Unmapped names become `related_to`, retaining the original in `legacy_relation`.
+The command reports input node/edge counts, mapped/unmapped edge counts, and the
+number of distinct original relation strings. Legacy corpus Documents are excluded
+from extraction by default; `include_legacy=true` explicitly opts them in. This
+option does not expose reference seed tables to any task.
+
+M9 acceptance uses fictional fixtures, temporary data directories, the local fake
+runner only, and no network. Run the full unit suite and leak scanner above.

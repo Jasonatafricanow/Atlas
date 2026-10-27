@@ -190,7 +190,7 @@ class QualityTests(unittest.TestCase):
         self.assertEqual(len(tasks), 3)
         for task in tasks:
             text = (queue.locate(task)[1] / "INSTRUCTIONS.md").read_text(encoding="utf-8")
-            for fragment in ("source language", "1.5", "speaker", "stance", "我"):
+            for fragment in ("source language", "1.5", "speaker", "stance", "named exactly as shown"):
                 self.assertIn(fragment, text)
         with patch.dict("os.environ", {"ATLAS_DATA_DIR": str(self.root), "ATLAS_OUT_DIR": str(self.root / "site")}):
             with redirect_stdout(StringIO()):

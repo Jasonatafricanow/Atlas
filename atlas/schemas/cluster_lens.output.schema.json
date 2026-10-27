@@ -34,7 +34,8 @@
                     "strengthen",
                     "weaken",
                     "reverse",
-                    "new_angle"
+                    "new_angle",
+                    "unclear"
                   ]
                 },
                 "reason": {

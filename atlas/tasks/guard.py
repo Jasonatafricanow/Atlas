@@ -31,7 +31,18 @@ def valid_identity(value):
     return "10X98765432"[sum(int(c) * w for c, w in zip(value, weights)) % 11] == value[-1].upper()
 
 
-def redact(text):
+class FilterCounter:
+    """Value-free counters, scoped to one ingestion operation."""
+    def __init__(self):
+        self.lines = 0
+        self.documents = 0
+
+
+def identifier_key(key):
+    return key in ("id", "ids") or key.endswith(("_id", "_ids"))
+
+
+def redact(text, counter=None):
     """Replace affected lines, retaining newlines; never log matched values."""
     affected = set()
     for pattern in (PATTERNS, PRIVATE_KEY):
@@ -45,15 +56,18 @@ def redact(text):
     for index in sorted(affected):
         ending = "\r\n" if lines[index].endswith("\r\n") else "\n" if lines[index].endswith("\n") else ""
         lines[index] = MARKER + ending
-        LOG.warning("credential removed at line %d", index + 1)
+        if counter is None:
+            LOG.warning("credential removed at line %d", index + 1)
+    if counter is not None:
+        counter.lines += len(affected)
     return "".join(lines)
 
 
-def sanitize(value):
+def sanitize(value, counter=None):
     if isinstance(value, str):
-        return redact(value)
+        return redact(value, counter)
     if isinstance(value, list):
-        return [sanitize(item) for item in value]
+        return [sanitize(item, counter) for item in value]
     if isinstance(value, dict):
-        return {key: sanitize(item) for key, item in value.items()}
+        return {key: item if identifier_key(key) else sanitize(item, counter) for key, item in value.items()}
     return value

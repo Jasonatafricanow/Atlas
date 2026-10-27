@@ -85,6 +85,29 @@
                         "quote"
                       ],
                       "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doc_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      },
+                      "required": [
+                        "doc_id",
+                        "lines"
+                      ],
+                      "additionalProperties": false
                     }
                   ]
                 },
@@ -138,6 +161,29 @@
                       "required": [
                         "doc_id",
                         "quote"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "doc_id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      },
+                      "required": [
+                        "doc_id",
+                        "lines"
                       ],
                       "additionalProperties": false
                     }

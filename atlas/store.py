@@ -13,15 +13,18 @@ class Store:
         self.db = sqlite3.connect(os.path.join(data_dir, "corpus.sqlite"))
         self.db.executescript(SCHEMA)
 
-    def upsert(self, docs):
-        from .tasks.guard import sanitize
+    def upsert(self, docs, counter=None):
+        from .tasks.guard import sanitize, FilterCounter
+        counter = counter if counter is not None else FilterCounter()
         n = 0
         for d in docs:
             # Store the filtered canonical document so task evidence offsets and
             # quote hashes refer to exactly the text that agents receive.
+            before = counter.lines
             fields = d.to_dict()
             for key in ("text", "author", "channel", "tags", "meta"):
-                fields[key] = sanitize(fields[key])
+                fields[key] = sanitize(fields[key], counter)
+            counter.documents += int(counter.lines > before)
             d = Document(**fields)
             self.db.execute("INSERT OR REPLACE INTO documents VALUES(?,?,?,?,?,?,?,?)",
                 (d.id, d.source, d.ts, d.text, d.author, d.channel,

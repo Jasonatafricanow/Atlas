@@ -85,7 +85,7 @@ class LinesTests(unittest.TestCase):
         self.assertFalse(fatal, errors)
         self.assertEqual([p["statement_id"] for p in kept["lines"][0]["timeline"]],
                          [self.sources[i]["statement_id"] for i in (0, 2)])
-        self.assertEqual([p["shift"] for p in kept["lines"][0]["timeline"]], ["first", "same"])
+        self.assertEqual([p["shift"] for p in kept["lines"][0]["timeline"]], ["first", "unclear"])
         self.assertEqual(len(kept["lines"][1]["timeline"]), 1)
         self.assertEqual(counts["unassigned"], 1)
         self.assertTrue(errors)
@@ -94,7 +94,7 @@ class LinesTests(unittest.TestCase):
         bad = dict(line_id="bad", title="Fiction", topic="garden", timeline=[point("missing")])
         kept, errors, fatal, counts = self.accept([point("s1")], [bad])
         self.assertFalse(fatal, errors)
-        self.assertEqual(counts, dict(accepted=1, dropped=1, unassigned=3))
+        self.assertEqual(counts, dict(accepted=1, dropped=1, unassigned=3, shift_repairs=0))
         self.assertTrue(self.accept([point("missing")])[2])
 
     def test_outcomes_require_later_related_points_on_same_line(self):
