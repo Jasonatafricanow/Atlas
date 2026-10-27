@@ -3,6 +3,8 @@ from dataclasses import asdict
 
 from ..graph.models import Node, Edge
 from .queue import digest, read_json
+from ..chat import statement_attribution
+from ..graph.confidence import calibrate
 
 
 def identity(prefix, *parts):
@@ -33,7 +35,7 @@ def _merge(queue, graph, identifier):
             raise ValueError("; ".join(errors))
         task, payload, output = [read_json(path / name) for name in
                                  ("task.json", "input.json", "output.json")]
-        if task["kind"] not in ("extract_entities", "resolve_entities", "gen_propositions"):
+        if task["kind"] not in ("extract_entities", "resolve_entities", "gen_propositions", "cluster_lens"):
             raise ValueError("unsupported merge kind")
         run_id = identity("run", identifier, task["input_hash"])
         previous = graph.get("task_runs", run_id)
@@ -41,7 +43,9 @@ def _merge(queue, graph, identifier):
             if previous["output_hash"] != digest(output):
                 raise ValueError("already merged task has changed output")
             return {"task_id": identifier, "state": "noop", "node_ids": previous["node_ids"]}
+        output = read_json(path / "accepted.json")
         mapping = {}
+        deduplicated = 0
         documents = {d["id"]: d for d in payload["documents"]}
 
         def put_entity(entity, target=None):
@@ -73,6 +77,9 @@ def _merge(queue, graph, identifier):
                                    valid_to=relation.get("valid_to"), observed_at=task["created_at"]))
                 edge["sensitive"] = any(graph.get("nodes", edge[k])["sensitive"] for k in ("src", "dst")) or any(
                     documents[e["doc_id"]].get("meta", {}).get("sensitive", False) for e in edge["evidence"])
+                if "confidence" in relation:
+                    edge["confidence"] = relation["confidence"]
+                    calibrate(edge, documents)
                 if relation.get("supersedes"):
                     old = graph.get("edges", relation["supersedes"])
                     if not old or old["type"] != edge["type"]:
@@ -82,9 +89,22 @@ def _merge(queue, graph, identifier):
                     graph.put("edges", edge)
                 for evidence in edge["evidence"]:
                     graph.put("evidence", dict(evidence, evidence_id=identity("evidence", evidence)))
+            for statement in output["statements"]:
+                record = {k: v for k, v in statement.items() if k != "tmp_id"}
+                record.update(statement_id=identity("statement", identifier, task["input_hash"], statement["tmp_id"]),
+                              about=[mapping[i] for i in statement["about"]],
+                              **statement_attribution(documents, statement["evidence"]))
+                record["sensitive"] = any(graph.get("nodes", i).get("sensitive", False) for i in record["about"]) or any(
+                    documents[e["doc_id"]].get("meta", {}).get("sensitive", False) for e in record["evidence"])
+                graph.put("statements", calibrate(record, documents))
+                for evidence in record["evidence"]:
+                    graph.put("evidence", dict(evidence, evidence_id=identity("evidence", evidence)))
+        elif task["kind"] == "cluster_lens":
+            from .lines import merge_lines
+            merge_lines(graph, payload, output, identifier)
         elif task["kind"] == "gen_propositions":
             from .propositions import merge_propositions
-            merge_propositions(graph, payload, output, task["created_at"])
+            deduplicated = merge_propositions(graph, payload, output, task["created_at"])
         else:
             candidates = {c["tmp_id"]: c for c in payload["candidates"]}
             for op in output["ops"]:
@@ -118,9 +138,20 @@ def _merge(queue, graph, identifier):
                                     edge[key] = target
                             edge["sensitive"] = edge.get("sensitive", False) or graph.get("nodes", target)["sensitive"]
                             graph.put("edges", edge)
+                    for statement in records(graph, "statements"):
+                        if source in statement["about"]:
+                            statement["about"] = list(dict.fromkeys(target if i == source else i for i in statement["about"]))
+                            statement["sensitive"] |= target_node.get("sensitive", False)
+                            graph.put("statements", statement)
+                    for line in records(graph, "lines"):
+                        if source in line.get("about", []):
+                            line["about"] = list(dict.fromkeys(target if i == source else i for i in line["about"]))
+                            if line["topic_node_id"] == source:
+                                line.update(topic_node_id=target, topic=target)
+                            graph.put("lines", line)
                     existing.update(status="superseded", superseded_by=target, valid_to=task["created_at"])
                     graph._write("nodes", existing, "SUPERSEDE")
         graph.put("task_runs", {"task_id": run_id, "source_task_id": identifier,
-                               "input_hash": task["input_hash"], "output_hash": digest(output),
-                               "node_ids": mapping})
-        return {"task_id": identifier, "state": "merged", "node_ids": mapping}
+                               "input_hash": task["input_hash"], "output_hash": digest(read_json(path / "output.json")),
+                               "node_ids": mapping, "deduplicated": deduplicated})
+        return {"task_id": identifier, "state": "merged", "node_ids": mapping, "deduplicated": deduplicated}

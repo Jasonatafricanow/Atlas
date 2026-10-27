@@ -63,9 +63,9 @@ class MergeTests(unittest.TestCase):
     def test_failure_rolls_back_all_rows_and_log(self):
         self.output["relations"][0]["valid_to"] = "2023-01-01"
         self.accept()
-        with self.assertRaises(ValueError):
-            merge(self.queue, self.graph, self.task)
-        self.assertTrue(all(value == 0 for value in self.graph.stats().values()))
+        merge(self.queue, self.graph, self.task)
+        self.assertEqual(self.graph.stats()["edges"], 0)
+        self.assertEqual(self.graph.stats()["nodes"], 2)
 
     def resolution(self, candidates, ops, nodes=None):
         payload = {"candidates": candidates, "nodes": nodes if nodes is not None else [
@@ -104,7 +104,8 @@ class MergeTests(unittest.TestCase):
             [{"node_id": "missing", "type": "concept", "name": "Synthetic missing node"}])
         with self.assertRaisesRegex(ValueError, "target"):
             merge(self.queue, self.graph, task)
-        self.assertTrue(all(value == 0 for value in self.graph.stats().values()))
+        self.assertEqual(self.graph.stats()["nodes"], 0)
+        self.assertEqual(self.graph.stats()["ops_log"], 0)
 
     def test_resolution_operations_and_evidence_validation(self):
         candidate = self.output["entities"][0]

@@ -18,7 +18,7 @@ python -m atlas all --config examples/atlas.config.example.toml   # fictional de
 - **LLM**: `atlas.llm.Pipeline(provider, presend=[...])`; default `NullProvider` is offline.
   Redaction / sensitivity veto are optional `PreSend` hooks.
 - **Frontend**: `web/index.html`, static, reads generated `data.js`. Holds no data.
-- **Corrections**: `data_dir/corrections.jsonl` (`{"doc_id":..,"verdict":"wrong","note":..}`), shown on cards.
+- **Corrections**: `data_dir/corrections.jsonl` (`{"correction_id":..,"prop_id":..,"verdict":"wrong","note":..,"observed_at":..}`), shown on cards.
 
 ## Private setup (sketch)
 ```
@@ -68,7 +68,7 @@ against the document Store. All queue mutations use an exclusive lock.
 
 Task workspaces live under `ATLAS_DATA_DIR/work/<state>/`. Logical IDs contain a
 colon; directory names encode it as `__` for Windows compatibility. Extract tasks
-contain at most 50 documents. Repeating make reuses unchanged tasks. Changed
+default to at most 50 documents and a 40000-character target (configurable). Repeating make reuses unchanged tasks. Changed
 content under the same document IDs is rejected as a collision; new source
 versions must receive new document IDs. Evidence spans are Unicode character
 indices with an exclusive end, and hashes use UTF-8. The built-in validator
@@ -83,8 +83,8 @@ task is revalidated against the source Store before merging. Graph changes,
 aliases, evidence pointers, operation history and the task marker commit in one
 SQLite transaction. Repeating the same `task_id + input_hash` leaves every table's
 row count unchanged, including `ops_log`. A changed output for an already merged
-task is refused. Extraction statements remain in the accepted output; profile
-generation belongs to M3.
+task is refused. Extraction statements are persisted with source-attributed speaker/time and
+calibrated confidence; profile generation remains a separate task.
 
 Extracted nodes have task-scoped identities: names and aliases alone do not prove
 identity. Use `tasks make --kind resolve_entities --input <file>` to package a
@@ -121,3 +121,24 @@ two `tasks merge` calls per task, and `graph stats`; checks all table counts;
 and verifies an explicit location contradiction and subsequent entity resolution.
 Initial statistics are 2 nodes / 1 edge. Final statistics are 4 retained nodes /
 2 retained edges (including superseded history), with 3 active nodes / 1 active edge.
+
+## M6 quality workflow
+
+Extraction now preserves statements and accepts valid items from partially invalid
+agent output. Inspect indexed `errors.json`, retained `accepted.json`, and the
+partial/count report in `validation.json`. Cross-node proposition deduplication
+folds evidence into existing active claims, respecting corrections. Confidence is
+capped by source breadth and keeps the original score as `raw_confidence`.
+
+After extraction and proposition merges, make `cluster_lens` tasks from persisted
+records, submit their outputs, then run `tasks merge --all`. The judgment lens
+shows chronological topic timelines with speaker, statement, assessed shift and
+later evidence-backed outcome. Without accepted clustering, it groups statements
+without inventing shifts or outcomes. Every Chinese UI tab explains reading and
+correction; sensitive content is hidden by default.
+
+`[tasks].batch_docs` defaults to 50 and `batch_chars` to 40000. Graph statistics
+include density, isolation, statement/line counts and confidence distribution.
+See [task contracts and offline acceptance](docs/AGENT_TASKS.md#m6-quality-contracts)
+for schemas, calibration, limitations and the synthetic-only test commands.
+This quality milestone does not add the optional MCP server.

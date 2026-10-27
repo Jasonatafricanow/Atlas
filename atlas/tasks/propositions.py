@@ -1,5 +1,8 @@
 """Merge proposition operations while preserving user authority."""
 import json
+import unicodedata
+from ..graph.confidence import calibrate
+from ..chat import statement_attribution
 from dataclasses import asdict
 
 from ..graph.models import Proposition
@@ -7,12 +10,20 @@ from ..profile import propositions
 
 
 def same_claim(left, right):
-    return (set(left["subject_node_ids"]) == set(right["subject_node_ids"])
-            and " ".join(left["text"].casefold().split()) == " ".join(right["text"].casefold().split()))
+    def grams(text):
+        text = "".join(c for c in unicodedata.normalize("NFKC", text).casefold() if c.isalnum())
+        if not text:
+            return set()
+        return {text[i:i+2] for i in range(max(1, len(text)-1))}
+    a, b = grams(left["text"]), grams(right["text"])
+    return left["kind"] == right["kind"] and (
+        set(left["subject_node_ids"]) == set(right["subject_node_ids"])
+        or bool(a | b) and len(a & b) / len(a | b) >= 0.6)
 
 
 def merge_propositions(graph, payload, output, observed_at):
     documents = {d["id"]: d for d in payload["documents"]}
+    deduplicated = 0
     for operation in output["ops"]:
         prop = operation["prop"]
         old = graph.get("propositions", operation.get("supersedes", prop["prop_id"]))
@@ -36,9 +47,24 @@ def merge_propositions(graph, payload, output, observed_at):
         if any(not n or n.get("status") == "superseded" for n in nodes):
             raise ValueError("proposition subjects must be active nodes")
         record = asdict(Proposition(**prop, observed_at=observed_at))
+        record.update(statement_attribution(documents, prop["evidence"]))
         record["sensitive"] = any(n.get("sensitive") for n in nodes) or any(
             documents[e["doc_id"]].get("meta", {}).get("sensitive", False)
             for e in prop["evidence"] + prop["counter_evidence"])
+        if operation["op"] == "ADD":
+            duplicate = next((p for p in propositions(graph) if p.get("status") in ("proposed", "confirmed")
+                              and not p.get("suppressed_by") and same_claim(p, record)), None)
+            if duplicate:
+                for key in ("evidence", "counter_evidence", "subject_node_ids"):
+                    duplicate[key] = list(duplicate.get(key, []))
+                    for value in record[key]:
+                        if value not in duplicate[key]:
+                            duplicate[key].append(value)
+                duplicate["sensitive"] = duplicate.get("sensitive", False) or record["sensitive"]
+                duplicate["raw_confidence"] = min(duplicate.get("raw_confidence", duplicate["confidence"]), record["confidence"])
+                graph.put("propositions", calibrate(duplicate, documents))
+                deduplicated += 1
+                continue
         if old:
             record["sensitive"] |= old.get("sensitive", False)
             if old.get("user_note"):
@@ -54,7 +80,9 @@ def merge_propositions(graph, payload, output, observed_at):
             # An UPDATE cannot silently rewrite a user-confirmed claim.
             record["text"] = old["text"]
             record["subject_node_ids"] = old["subject_node_ids"]
+        calibrate(record, documents)
         if operation["op"] == "SUPERSEDE":
             graph.supersede("propositions", old["prop_id"], record, record["valid_from"])
         else:
             graph.put("propositions", record)
+    return deduplicated

@@ -78,6 +78,11 @@ def validate_output(kind, output, task_input, store):
             for index, item in enumerate(value):
                 walk(item, f"{path}[{index}]", evidence)
     walk(output)
+    if kind == "cluster_lens":
+        from .lines import validate_lines
+        walk(task_input["statements"])
+        walk(task_input["propositions"])
+        errors += validate_lines(output, task_input)
     if kind == "gen_propositions":
         nodes = {n["node_id"] for n in task_input["subgraph"].get("nodes", [])}
         existing = {p["prop_id"]: p for p in task_input["propositions"]}
@@ -101,6 +106,10 @@ def validate_output(kind, output, task_input, store):
                     errors.append("$.ops: SUPERSEDE requires supersedes and valid_from")
             elif "supersedes" in operation:
                 errors.append("$.ops: supersedes only applies to SUPERSEDE")
+            if prop.get("valid_from") and prop.get("valid_to") and prop["valid_to"] < prop["valid_from"]:
+                errors.append("$.ops.prop: valid_to precedes valid_from")
+            if operation["op"] == "SUPERSEDE" and old and (prop["prop_id"] in existing or (old.get("valid_from") and prop.get("valid_from") and prop["valid_from"] < old["valid_from"])):
+                errors.append("$.ops: supersession requires a new identity and a valid transition date")
             if prop["status"] == "superseded" or prop.get("superseded_by"):
                 errors.append("$.ops.prop: supersession is managed by the store")
     if kind == "resolve_entities":
@@ -111,6 +120,8 @@ def validate_output(kind, output, task_input, store):
             errors.append("$.ops: exactly one operation per unique candidate required")
         nodes = {node["node_id"]: node for node in task_input["nodes"]}
         for op in output["ops"]:
+            if op["op"] == "ADD" and candidates.get(op["tmp_id"], {}).get("node_id"):
+                errors.append("$.ops: ADD requires a candidate without an existing node_id")
             if op["op"] == "MERGE_INTO":
                 node = nodes.get(op.get("node_id"))
                 if not node or node["type"] != candidates.get(op["tmp_id"], {}).get("type"):
@@ -131,3 +142,86 @@ def validate_output(kind, output, task_input, store):
             if not set(statement["about"]) <= set(ids):
                 errors.append("$.statements.about: unknown entity reference")
     return errors
+
+
+def accept_items(kind, output, task_input, store, edges=None):
+    """Keep independently valid items; return indexed diagnostics and counts."""
+    schema = schema_for(kind + ".output")
+    groups = {"extract_entities": ["entities", "relations", "statements"],
+              "resolve_entities": ["ops"], "gen_propositions": ["ops"],
+              "cluster_lens": ["lines"]}.get(kind)
+    if groups is None:
+        errors = validate_output(kind, output, task_input, store)
+        return output, errors, bool(errors), {"accepted": int(not errors), "dropped": int(bool(errors))}
+    # Check the outer shape separately from individual records.
+    import copy
+    outer = copy.deepcopy(schema)
+    for group in groups:
+        outer["properties"][group]["items"] = {}
+    errors = check_schema(output, outer)
+    if errors:
+        return {}, errors, True, {"accepted": 0, "dropped": 0}
+    kept = {**output, **{group: [] for group in groups}}
+    errors = []
+    seen = set()
+    for group in groups:
+        items = output[group]
+        identities = []
+        for item in items:
+            identities.append(item.get("tmp_id") if isinstance(item, dict) else None)
+        for index, item in enumerate(items):
+            reasons = check_schema(item, schema["properties"][group]["items"])
+            if not reasons:
+                probe = {**kept, **{g: [] for g in groups}}
+                probe[group] = [item]
+                context = task_input
+                if kind == "extract_entities":
+                    if group != "entities":
+                        probe["entities"] = kept["entities"]
+                    identity = item.get("tmp_id")
+                    if identity and (identity in seen or identities.count(identity) > 1):
+                        reasons.append("duplicate identity")
+                if kind == "resolve_entities":
+                    context = dict(task_input, candidates=[c for c in task_input["candidates"] if c["tmp_id"] == item["tmp_id"]])
+                    if identities.count(item["tmp_id"]) > 1:
+                        reasons.append("duplicate operation for candidate")
+                if kind == "cluster_lens" and item["line_id"] in seen:
+                    reasons.append("duplicate line identity")
+                if kind == "gen_propositions":
+                    identity = item["prop"]["prop_id"]
+                    if identity in seen:
+                        reasons.append("duplicate proposition identity")
+                    existing = {p["prop_id"]: p for p in task_input["propositions"]}
+                    old = existing.get(item.get("supersedes", identity))
+                    if item["op"] in ("UPDATE", "SUPERSEDE", "NOOP") and not old:
+                        reasons.append("operation requires an existing proposition")
+                    if item["op"] == "ADD" and old:
+                        reasons.append("ADD requires a new proposition identity")
+                    if old and old.get("status") == "superseded":
+                        reasons.append("superseded records are immutable")
+                reasons += validate_output(kind, probe, context, store)
+                if group == "relations" and item.get("supersedes"):
+                    old = (edges or {}).get(item["supersedes"])
+                    if not old or old["type"] != item["type"] or not item.get("valid_from"):
+                        reasons.append("supersedes requires an existing same-type edge and valid_from")
+                    elif old.get("valid_from") and item["valid_from"] < old["valid_from"]:
+                        reasons.append("supersession precedes old valid_from")
+                if group == "relations" and item.get("valid_from") and item.get("valid_to") and item["valid_to"] < item["valid_from"]:
+                    reasons.append("valid_to precedes valid_from")
+            if reasons:
+                errors.extend(f"$.{group}[{index}]: {reason}" for reason in reasons)
+            else:
+                kept[group].append(item)
+                identity = item.get("tmp_id") or item.get("line_id") or (item.get("prop") or {}).get("prop_id")
+                if identity:
+                    seen.add(identity)
+    if kind == "resolve_entities":
+        supplied = {item.get("tmp_id") for item in output["ops"] if isinstance(item, dict)}
+        for index, candidate in enumerate(task_input["candidates"]):
+            if candidate["tmp_id"] not in supplied:
+                errors.append(f"$.candidates[{index}]: missing operation")
+    accepted = sum(len(kept[g]) for g in groups)
+    total = sum(len(output[g]) for g in groups)
+    if not accepted and not errors:
+        errors.append("$: no valid items")
+    return kept, errors, not accepted, {"accepted": accepted, "dropped": total - accepted}

@@ -25,7 +25,7 @@ def build(cfg, st=None):
         sync_corrections(graph, cfg["data_dir"])
         snapshot = {table: [json.loads(row[0]) for row in graph.db.execute(
             f"SELECT data FROM {table} ORDER BY id")]
-            for table in ("nodes", "edges", "propositions")}
+            for table in ("nodes", "edges", "propositions", "statements", "lines")}
     finally:
         graph.close()
     views = []
@@ -64,13 +64,15 @@ def main(argv=None):
             parser.add_argument("--print-cmd", action="store_true")
             parser.add_argument("--timeout", type=float, default=660)
         if name == "make":
-            parser.add_argument("--kind", choices=["extract_entities", "resolve_entities", "gen_propositions"], required=True)
+            parser.add_argument("--kind", choices=["extract_entities", "resolve_entities", "gen_propositions", "cluster_lens"], required=True)
             parser.add_argument("--input", help="resolution input JSON with candidates, nodes and documents")
             parser.add_argument("--node", help="graph node for gen_propositions")
         if name == "list":
             parser.add_argument("--json", action="store_true")
         if name in ("claim", "submit", "validate", "merge"):
-            parser.add_argument("task_id")
+            parser.add_argument("task_id", nargs="?" if name == "merge" else None)
+        if name == "merge":
+            parser.add_argument("--all", action="store_true")
         if name == "claim":
             parser.add_argument("--owner", required=True)
             parser.add_argument("--lease-seconds", type=int, default=300)
@@ -124,7 +126,8 @@ def task_command(a):
     else:
         store = Store(data_dir)
     try:
-        queue = Queue(data_dir, store, cfg.get("tasks", {}).get("forbidden_terms") if cfg else None)
+        options = cfg.get("tasks", {}) if cfg else {}
+        queue = Queue(data_dir, store, options.get("forbidden_terms"), options.get("batch_docs", 50), options.get("batch_chars", 40000))
         if a.cmd == "profile":
             from .profile import correct, propositions, sync_corrections
             graph = GraphStore(data_dir)
@@ -138,7 +141,18 @@ def task_command(a):
         elif a.action == "make":
             from .tasks.queue import read_json
             from pathlib import Path
-            if a.kind == "gen_propositions":
+            if a.kind == "cluster_lens":
+                from .tasks.lines import make_lines
+                from .profile import sync_corrections
+                if a.input or a.node:
+                    raise ValueError("cluster_lens uses the persisted graph snapshot")
+                graph = GraphStore(data_dir)
+                try:
+                    sync_corrections(graph, data_dir)
+                    result = make_lines(queue, graph)
+                finally:
+                    graph.close()
+            elif a.kind == "gen_propositions":
                 from .profile import snapshot
                 if not a.node or a.input:
                     raise ValueError("gen_propositions requires --node and uses the live graph snapshot")
@@ -161,7 +175,10 @@ def task_command(a):
             from .tasks.merge import merge
             graph = GraphStore(data_dir)
             try:
-                result = merge(queue, graph, a.task_id)
+                if a.all == bool(a.task_id):
+                    raise ValueError("provide one task_id or --all")
+                result = ([merge(queue, graph, r["task_id"]) for r in queue.list() if r["state"] == "accepted"]
+                          if a.all else merge(queue, graph, a.task_id))
             finally:
                 graph.close()
         else: result = queue.reap()

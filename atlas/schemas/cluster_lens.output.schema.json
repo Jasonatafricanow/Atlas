@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
     "lines": {
@@ -15,7 +14,7 @@
             "type": "string",
             "minLength": 1
           },
-          "topic_node_id": {
+          "topic": {
             "type": "string",
             "minLength": 1
           },
@@ -24,65 +23,68 @@
             "items": {
               "type": "object",
               "properties": {
-                "ts": {
-                  "type": "string",
-                  "minLength": 1
-                },
                 "statement_id": {
                   "type": "string",
                   "minLength": 1
                 },
                 "shift": {
                   "enum": [
-                    "none",
-                    "refine",
-                    "reverse"
+                    "first",
+                    "same",
+                    "strengthen",
+                    "weaken",
+                    "reverse",
+                    "new_angle"
                   ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "outcome": {
+                  "enum": [
+                    "confirmed",
+                    "refuted",
+                    "mixed",
+                    "unknown"
+                  ]
+                },
+                "outcome_statement_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "outcome_reason": {
+                  "type": "string"
                 }
               },
               "required": [
-                "ts",
                 "statement_id",
-                "shift"
+                "shift",
+                "reason",
+                "outcome",
+                "outcome_statement_ids",
+                "outcome_reason"
               ],
               "additionalProperties": false
-            }
+            },
+            "minItems": 1
           }
         },
         "required": [
           "line_id",
           "title",
-          "topic_node_id",
+          "topic",
           "timeline"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "line_id_map": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "old_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "new_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "old_id",
-          "new_id"
         ],
         "additionalProperties": false
       }
     }
   },
   "required": [
-    "lines",
-    "line_id_map"
+    "lines"
   ],
   "additionalProperties": false
 }

@@ -10,7 +10,8 @@ from .models import NODE_TYPES
 
 TABLES = {"nodes": "node_id", "edges": "edge_id", "aliases": "alias_id",
           "evidence": "evidence_id", "propositions": "prop_id",
-          "corrections": "correction_id", "task_runs": "task_id"}
+          "corrections": "correction_id", "task_runs": "task_id",
+          "statements": "statement_id", "lines": "line_id"}
 
 
 class GraphStore:
@@ -97,5 +98,21 @@ class GraphStore:
             self._write(table, old, "SUPERSEDE")
 
     def stats(self):
-        return {table: self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
-                for table in (*TABLES, "ops_log")}
+        counts = {table: self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+                  for table in (*TABLES, "ops_log")}
+        rows = {table: [json.loads(r[0]) for r in self.db.execute(f"SELECT data FROM {table}")]
+                for table in ("nodes", "edges", "propositions", "lines")}
+        nodes = {n["node_id"] for n in rows["nodes"] if n.get("status") not in ("superseded", "rejected")}
+        edges = [e for e in rows["edges"] if e.get("status") in ("proposed", "confirmed") and e["src"] in nodes and e["dst"] in nodes]
+        connected = {e[k] for e in edges for k in ("src", "dst")}
+        histogram = {"0-0.55": 0, "0.55-0.7": 0, "0.7-0.8": 0, "0.8-0.9": 0, "0.9-1": 0}
+        for prop in rows["propositions"]:
+            if prop.get("status") not in ("proposed", "confirmed"):
+                continue
+            key = next(label for label, cap in zip(histogram, (0.55, 0.7, 0.8, 0.9, 1)) if prop["confidence"] <= cap)
+            histogram[key] += 1
+        counts.update(active_nodes=len(nodes), active_edges=len(edges), isolated_nodes=len(nodes - connected),
+                      edges_per_node=len(edges) / len(nodes) if nodes else 0,
+                      avg_points_per_line=sum(len(l["timeline"]) for l in rows["lines"]) / len(rows["lines"]) if rows["lines"] else 0,
+                      proposition_confidence_histogram=histogram)
+        return counts

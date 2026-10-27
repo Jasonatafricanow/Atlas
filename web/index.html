@@ -1,10 +1,10 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'">
 <title>ATLAS</title>
 <style>
-:root{font:16px/1.6 system-ui,sans-serif;color:#24352f;background:#f4f6f2}body{max-width:1160px;margin:2rem auto;padding:0 1rem}h1{letter-spacing:.15em;margin-bottom:0}h2,h3{line-height:1.3}button,select,textarea{font:inherit}button,select{padding:.45rem .8rem;border:1px solid #aab9ae;border-radius:6px;background:white;color:inherit;cursor:pointer}button:hover,button[aria-selected=true]{background:#245744;color:white}button:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #bc792b;outline-offset:2px}nav,.toolbar,.actions{display:flex;gap:.6rem;flex-wrap:wrap;margin:1rem 0}.layout{display:grid;grid-template-columns:260px 1fr;gap:1.4rem}.card,aside{background:#fff;border:1px solid #d5ded6;border-radius:10px;padding:1rem;margin-bottom:1rem}.node{display:block;width:100%;text-align:left;margin:.4rem 0}.muted{color:#586a60;font-size:.9rem}.badge{font-size:.8rem;background:#e6eee6;padding:.15rem .4rem;border-radius:4px}code{overflow-wrap:anywhere}textarea{box-sizing:border-box;width:100%;min-height:5rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}details{margin:.6rem 0}.point{border-left:3px solid #bc792b;padding-left:1rem;margin:1rem 0}[hidden]{display:none!important}@media(max-width:700px){.layout{grid-template-columns:1fr}body{margin:1rem auto}}
+:root{font:16px/1.6 system-ui,sans-serif;color:#24352f;background:#f4f6f2}body{max-width:1160px;margin:2rem auto;padding:0 1rem}h1{letter-spacing:.15em;margin-bottom:0}h2,h3{line-height:1.3}button,select,textarea{font:inherit}button,select{padding:.45rem .8rem;border:1px solid #aab9ae;border-radius:6px;background:white;color:inherit;cursor:pointer}button:hover,button[aria-selected=true]{background:#245744;color:white}button:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #bc792b;outline-offset:2px}nav,.toolbar,.actions{display:flex;gap:.6rem;flex-wrap:wrap;margin:1rem 0}.layout{display:grid;grid-template-columns:260px 1fr;gap:1.4rem}.card,aside{background:#fff;border:1px solid #d5ded6;border-radius:10px;padding:1rem;margin-bottom:1rem}.node{display:block;width:100%;text-align:left;margin:.4rem 0}.muted{color:#586a60;font-size:.9rem}.badge{font-size:.8rem;background:#e6eee6;padding:.15rem .4rem;border-radius:4px}code{overflow-wrap:anywhere}textarea{box-sizing:border-box;width:100%;min-height:5rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}details{margin:.6rem 0}.topic-timeline{list-style:none;padding:0}.point{border-left:3px solid #bc792b;padding-left:1rem;margin:1rem 0}[hidden]{display:none!important}@media(max-width:700px){.layout{grid-template-columns:1fr}body{margin:1rem auto}}
 </style></head><body>
 <header><h1>ATLAS</h1><p id="meta" class="muted"></p></header>
 <div class="toolbar"><label><input id="sensitive" type="checkbox"> 显示敏感内容</label></div>
@@ -28,25 +28,28 @@ const showSensitive=()=>document.getElementById('sensitive').checked;
 const visibleNode=id=>nodes.has(id)&&(showSensitive()||!nodes.get(id).sensitive);
 const visibleProp=p=>p&&(showSensitive()||!p.sensitive)&&p.subject_node_ids.every(visibleNode);
 const visibleEdge=e=>(showSensitive()||!e.sensitive)&&visibleNode(e.src)&&visibleNode(e.dst);
+const labels={person:'人物',concept:'概念',place:'地点',event:'事件',instrument:'标的',topic:'主题',fact:'事实',opinion:'观点',plan:'计划',preference:'偏好',proposed:'待确认',confirmed:'已确认',rejected:'已否定',superseded:'已取代',first:'首次',same:'维持',strengthen:'加强',weaken:'减弱',reverse:'转向',new_angle:'新角度',refuted:'被反驳',mixed:'部分支持',unknown:'未知'};
+const label=v=>labels[v]||v||'未评估';
+const visiblePoint=p=>(showSensitive()||!p.sensitive)&&(p.about||[]).every(visibleNode);
 const empty='<p class="muted">暂无可显示的记录。</p>';
 const times=r=>`<p class="muted">有效期：${esc(r.valid_from||'未知')} → ${esc(r.valid_to||'未设定')}<br>观察时间：${esc(r.observed_at||'未知')}</p>`;
 const evidence=(items,title='证据指针')=>`<details><summary>${title} (${(items||[]).length})</summary>${(items||[]).map(e=>`<p><code>${esc(e.doc_id)} · [${esc((e.span||[]).join(', '))}] · sha256: ${esc(e.quote_hash)}</code></p>`).join('')||empty}</details>`;
 function card(p){
- return `<article class="card"><span class="badge">${esc(p.kind)} · ${esc(p.status)}</span><h3>${esc(p.text)}</h3><p>置信度：${esc(p.confidence)} · ${esc(p.subject_node_ids.map(id=>nodes.get(id)?.name||id).join(' / '))}</p>${times(p)}${evidence(p.evidence)}${evidence(p.counter_evidence,'反证指针')}<p class="muted">${esc(p.prop_id)}${p.superseded_by?' · 取代者：'+esc(p.superseded_by):''}${p.suppressed_by?' · 已抑制':''}</p>${p.user_note?`<p>补充：${esc(p.user_note)}</p>`:''}${p.status==='superseded'?'<p>历史命题；请纠正其当前版本。</p>':`<label>纠正备注<textarea data-note="${esc(p.prop_id)}" placeholder="补充时必填"></textarea></label><div class="actions">${[['right','对'],['wrong','不对'],['amend','补充']].map(([v,t])=>`<button data-prop="${esc(p.prop_id)}" data-verdict="${v}">${t}</button>`).join('')}</div>`}</article>`;
+ return `<article class="card"><span class="badge">${esc(label(p.kind))} · ${esc(label(p.status))}</span><h3>${esc(p.text)}</h3><p>置信度：${esc(p.confidence)} · ${esc(p.subject_node_ids.map(id=>nodes.get(id)?.name||id).join(' / '))}</p>${times(p)}${evidence(p.evidence)}${evidence(p.counter_evidence,'反证指针')}<p class="muted">${esc(p.prop_id)}${p.superseded_by?' · 取代者：'+esc(p.superseded_by):''}${p.suppressed_by?' · 已抑制':''}</p>${p.user_note?`<p>补充：${esc(p.user_note)}</p>`:''}${p.status==='superseded'?'<p>历史命题；请纠正其当前版本。</p>':`<label>纠正备注<textarea data-note="${esc(p.prop_id)}" placeholder="补充时必填"></textarea></label><div class="actions">${[['right','对'],['wrong','不对'],['amend','补充']].map(([v,t])=>`<button data-prop="${esc(p.prop_id)}" data-verdict="${v}">${t}</button>`).join('')}</div>`}</article>`;
 }
 function graphView(){
  const list=D.nodes.filter(n=>visibleNode(n.node_id)&&(!type||n.type===type));
  if(!list.some(n=>n.node_id===selected))selected=list[0]?.node_id;
  const n=nodes.get(selected);
  const options=[...new Set(D.nodes.filter(n=>visibleNode(n.node_id)).map(n=>n.type))].sort();
- main.innerHTML=`<div class="layout"><aside><h2>节点</h2><label>类型 <select id="type"><option value="">全部类型</option>${options.map(t=>`<option ${t===type?'selected':''} value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>${list.map(n=>`<button class="node" data-node="${esc(n.node_id)}" aria-pressed="${n.node_id===selected}">${esc(n.name)} <span class="muted">${esc(n.type)}</span></button>`).join('')||empty}</aside><section>${n?`<div class="card"><span class="badge">${esc(n.type)}</span><h2>${esc(n.name)}</h2><code>${esc(n.node_id)}</code>${times(n)}${evidence(n.evidence)}<h3>关系</h3>${D.edges.filter(e=>visibleEdge(e)&&(e.src===selected||e.dst===selected)).map(e=>`<div class="point">${esc(nodes.get(e.src).name)} → ${esc(e.type)} → ${esc(nodes.get(e.dst).name)} <span class="badge">${esc(e.status)}</span>${times(e)}${evidence(e.evidence)}</div>`).join('')||empty}</div><h2>节点命题</h2>${D.propositions.filter(p=>visibleProp(p)&&p.subject_node_ids.includes(selected)).map(card).join('')||empty}`:empty}</section></div>`;
+ main.innerHTML=`<div class="layout"><aside><h2>节点</h2><label>类型 <select id="type"><option value="">全部类型</option>${options.map(t=>`<option ${t===type?'selected':''} value="${esc(t)}">${esc(label(t))}</option>`).join('')}</select></label>${list.map(n=>`<button class="node" data-node="${esc(n.node_id)}" aria-pressed="${n.node_id===selected}">${esc(n.name)} <span class="muted">${esc(label(n.type))}</span></button>`).join('')||empty}</aside><section>${n?`<div class="card"><span class="badge">${esc(label(n.type))}</span><h2>${esc(n.name)}</h2><code>${esc(n.node_id)}</code>${times(n)}${evidence(n.evidence)}<h3>关系</h3>${D.edges.filter(e=>visibleEdge(e)&&(e.src===selected||e.dst===selected)).map(e=>`<div class="point">${esc(nodes.get(e.src).name)} → ${esc(e.type)} → ${esc(nodes.get(e.dst).name)} <span class="badge">${esc(label(e.status))}</span>${times(e)}${evidence(e.evidence)}</div>`).join('')||empty}</div><h2>节点命题</h2>${D.propositions.filter(p=>visibleProp(p)&&p.subject_node_ids.includes(selected)).map(card).join('')||empty}`:empty}</section></div>`;
  document.getElementById('type').onchange=e=>{type=e.target.value;render();};
 }
 function lensView(lens){
  if(lens.view.type==='judgment_lines'){
   main.innerHTML=(lens.view.lines||[]).filter(l=>visibleNode(l.topic_node_id)).map(l=>{
-   const points=l.timeline.filter(p=>visibleProp(props.get(p.statement_id)));
-   return points.length?`<section class="card"><h2>${esc(l.title)}</h2>${points.map(p=>`<div class="point"><p>${esc(p.ts||'未知时间')} · shift: ${esc(p.shift)}</p>${card(props.get(p.statement_id))}</div>`).join('')}</section>`:'';
+   const points=l.timeline.filter(visiblePoint);
+   return points.length?`<section class="card"><h2>${esc(l.title)}</h2><ol class="topic-timeline">${points.map(p=>`<li class="point"><p><time>${esc(p.ts||'未知时间')}</time> · 发言者：${esc(p.speaker||'未知')}</p><p>${esc(p.text)}</p><span class="badge">${esc(label(p.shift))}</span> <span>${esc(p.reason||'未评估变化')}</span><p>后续结果：${esc(label(p.outcome))} ${esc(p.outcome_reason||'')}</p>${evidence(p.evidence)}${props.has(p.statement_id)?`<details><summary>查看命题并纠正</summary>${card(props.get(p.statement_id))}</details>`:''}</li>`).join('')}</ol></section>`:'';
   }).join('')||empty;
  }else if(lens.view.type==='timeline'){
   main.innerHTML=(lens.view.items||[]).filter(p=>visibleProp(props.get(p.statement_id))).map(p=>`<section><h2>${esc(p.ts||'未知时间')}</h2>${card(props.get(p.statement_id))}</section>`).join('')||empty;
@@ -57,6 +60,8 @@ function render(){
  if(tab==='graph')graphView();
  else if(tab==='profile')main.innerHTML='<h2>画像</h2>'+ (D.propositions.filter(visibleProp).map(card).join('')||empty);
  else lensView(D.lenses[Number(tab)]);
+ const intro=tab==='graph'?'如何阅读：选择节点查看关系、时间与证据指针。如何纠正：在关联命题中点击“对 / 不对 / 补充”，下载纠正片段。':tab==='profile'?'如何阅读：置信度受证据数量、时间跨度和反证约束，不代表事实已被证实。如何纠正：选择“对 / 不对 / 补充”，下载后追加至纠正日志。':D.lenses[Number(tab)].view.type==='judgment_lines'?'如何阅读：每个主题按时间串联发言；变化和后续结果是带来源引用的判断，未评估不代表立场相同。如何纠正：命题可展开纠正；发言归属或判断线错误需修正源记录并重新生成。':'如何阅读：按时间查看命题；未知时间保留未知。如何纠正：使用命题下的纠正按钮并导出片段。';
+ main.insertAdjacentHTML('afterbegin',`<p class="card">${esc(intro)}</p>`);
  // Hidden sensitive corrections must not remain visible in the preview.
  const rows=corrections.filter(r=>visibleProp(props.get(r.prop_id)));
  document.getElementById('export').hidden=!rows.length;

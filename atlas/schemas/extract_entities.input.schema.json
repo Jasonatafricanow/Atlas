@@ -49,8 +49,7 @@
         ],
         "additionalProperties": false
       },
-      "minItems": 1,
-      "maxItems": 50
+      "minItems": 1
     },
     "forbidden_terms": {
       "type": "array",

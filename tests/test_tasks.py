@@ -107,7 +107,10 @@ class TaskTests(unittest.TestCase):
                              ("confidence", 1.1), ("about", ["unknown"]), ("tmp_id", "e1")]:
             output = json.loads(json.dumps(self.good))
             output["statements"][0][field] = value
-            self.assertEqual(self.submit(output)["state"], "rejected")
+            result = self.submit(output)
+            self.assertEqual(result["state"], "accepted")
+            self.assertTrue(result["partial"])
+            self.assertEqual(result["counts"], {"accepted": 1, "dropped": 1})
         text = "A synthetic tree: \u6a39\U0001f333"
         self.store.upsert([Document("unicode-fiction", "synthetic", "2024-01-01", text)])
         evidence = {"doc_id": "unicode-fiction", "span": [18, 20],

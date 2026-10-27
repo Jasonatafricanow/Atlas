@@ -1,27 +1,36 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "topic_node_id": {
-      "type": "string",
-      "minLength": 1
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     },
     "statements": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "tmp_id": {
+          "statement_id": {
             "type": "string",
             "minLength": 1
           },
-          "kind": {
-            "enum": [
-              "fact",
-              "opinion",
-              "plan",
-              "preference"
+          "ts": {
+            "type": [
+              "string",
+              "null"
             ]
+          },
+          "speaker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
           },
           "about": {
             "type": "array",
@@ -30,63 +39,58 @@
               "minLength": 1
             },
             "minItems": 1
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120
-          },
-          "stance": {
+          }
+        },
+        "required": [
+          "statement_id",
+          "ts",
+          "speaker",
+          "text",
+          "about"
+        ]
+      }
+    },
+    "propositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "statement_id": {
             "type": "string",
             "minLength": 1
           },
-          "confidence": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+          "ts": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
-          "evidence": {
+          "speaker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "about": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "doc_id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "span": {
-                  "type": "array",
-                  "items": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "minItems": 2,
-                  "maxItems": 2
-                },
-                "quote_hash": {
-                  "type": "string",
-                  "pattern": "^[a-f0-9]{12}$"
-                }
-              },
-              "required": [
-                "doc_id",
-                "span",
-                "quote_hash"
-              ],
-              "additionalProperties": false
+              "type": "string",
+              "minLength": 1
             },
             "minItems": 1
           }
         },
         "required": [
-          "tmp_id",
-          "kind",
-          "about",
+          "statement_id",
+          "ts",
+          "speaker",
           "text",
-          "confidence",
-          "evidence"
-        ],
-        "additionalProperties": false
+          "about"
+        ]
       }
     },
     "existing_lines": {
@@ -97,8 +101,9 @@
     }
   },
   "required": [
-    "topic_node_id",
+    "documents",
     "statements",
+    "propositions",
     "existing_lines"
   ],
   "additionalProperties": false

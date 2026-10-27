@@ -1,4 +1,4 @@
-﻿# Agent task workflow and M5 frontend
+﻿# Agent task workflow and M6 quality
 
 ATLAS is an offline graph and correctable profile shell. Task work lives only in
 `ATLAS_DATA_DIR/work/{pending,claimed,submitted,accepted,rejected}/<task_id>/`.
@@ -10,10 +10,10 @@ an evidence pointer: use `{doc_id, span: [start,end], quote_hash}` with the firs
 
 | Kind | Contract | Current support |
 | --- | --- | --- |
-| extract_entities | entities, relations, statements; evidence must resolve | make, validate, merge entities/relations |
+| extract_entities | entities, relations, statements; evidence must resolve | make, validate, merge entities/relations/statements |
 | resolve_entities | one ADD/MERGE_INTO/NOOP per candidate; existing merge target | make with --input, validate, merge |
 | gen_propositions | ADD/UPDATE/SUPERSEDE/NOOP; at least two support pointers; retain counter evidence | make with --node, validate, merge |
-| cluster_lens | topic statements, explicit line identity and shift | schema only; no task execution/merge |
+| cluster_lens | topic statements, explicit line identity and shift | make from persisted records, validate, merge |
 | verify | confirmed/refuted/mixed/unknown with basis; unknown without data | schema only; no task execution/merge |
 
 `tasks make|list|claim|submit|validate|merge|run|reap` manage the queue. Claim with
@@ -49,8 +49,10 @@ Open `_demo_out/m5-site/index.html`. The companion `data.js` enables offline
 file viewing; `atlas.json` contains `nodes`, `edges`, `propositions`, `lenses`.
 This replaces the older `views` export key. Built-in lenses now project graph
 propositions, not raw document text. Custom lenses receive `ctx.graph` as well
-as the document argument. The judgment lens groups propositions by topic node;
-shift stays `none` because no stance-change classification has been accepted.
+as the document argument. The judgment lens prefers accepted lines, then groups stored statements by shared
+about nodes. Connected topics form one timeline. Fallback points have unassessed
+shifts and unknown outcomes; no stance change is inferred. Legacy graphs without
+statements can still display proposition history.
 Unknown dates stay unknown.
 
 ## Review and correct
@@ -77,7 +79,7 @@ sensitive queued corrections from preview and download.
 For direct CLI corrections use:
 `atlas profile correct <prop_id> --verdict wrong|right|amend --note <note>`
 with an explicit demo data path or config. `atlas profile list` displays the
-current projected state. M6/MCP is not part of this milestone.
+current projected state. The optional MCP server is separate from the M6 quality milestone.
 
 ## Real agent run on the fictional corpus (Windows)
 
@@ -97,4 +99,88 @@ python -m atlas tasks merge <task_id> --config $c
 python -m atlas tasks make --kind gen_propositions --node <node_id> --config $c
 python -m atlas tasks run --runner codex --parallel 4 --timeout 1200 --config $c
 python -m atlas all --config $c   # -> _demo_out/run-site/index.html
+```
+## M6 quality contracts
+
+New tasks use schema/prompt version 2; existing task directories and their original
+outputs are retained. Re-extraction under the new version is an explicit new task,
+not a migration of previously merged graph records.
+
+Extraction persists `statements` with task-scoped IDs, mapped `about` node IDs,
+kind/text/stance, source evidence, speaker/time, sensitivity and calibrated confidence.
+Chat `[MM-DD HH:MM] speaker: text` evidence is attributed only when it selects one
+line. The year must be uniquely resolvable within the document date / `meta.ts_end`
+interval. Plain text falls back to document author/time. Ambiguous multi-speaker
+spans have unknown speaker; unknown dates are never replaced by processing time.
+
+Validation retains independent valid entities, relations, statements, operations
+and lines. `output.json` remains the original submission; `accepted.json` contains
+only retained items. `errors.json` lists indexed reasons. `validation.json` and the
+CLI response contain `partial`, accepted/dropped counts, and diagnostics. Missing
+resolution operations are reported against candidate indices. Broken input or
+envelope data, malformed outer output, or no valid items rejects the task.
+Dropped entities also drop dependent relations/statements. Merge revalidates and
+uses only accepted items, with a transaction and original-output hash for replay
+idempotency. Live graph changes that make an accepted operation stale still abort
+its transaction rather than silently overwrite newer state.
+
+`tasks make --kind cluster_lens` snapshots persisted statements and active
+propositions (with source IDs, time, speaker, text, about, and evidence). It makes
+batches of at most 200 records and the configured character target; one oversized
+record remains intact. Empty graphs produce no tasks. Submit JSON of this shape:
+
+```json
+{"lines":[{"line_id":"fiction-line","title":"Fictional garden","topic":"input-node-id",
+ "timeline":[{"statement_id":"input-statement-id","shift":"first","reason":"First input record",
+ "outcome":"unknown","outcome_statement_ids":[],"outcome_reason":""}]}]}
+```
+
+Points reference input IDs, never agent-supplied dates or speakers. Shifts are
+`first`, `same`, `strengthen`, `weaken`, `reverse`, `new_angle`; each needs a reason.
+Known outcomes (`confirmed`, `refuted`, `mixed`) need an explanation and IDs of
+strictly later related input statements. Otherwise use `unknown`. These checks
+verify reference/time grounding, not the semantic truth of the agent's explanation.
+Merged line IDs are task-scoped, and the display coalesces connected topics across
+batches. A correction invalidating outcome support resets that outcome to unknown.
+
+New propositions of the same kind fold into an active proposition when their
+subject sets match or normalized character-bigram Jaccard similarity is at least
+0.6. Evidence, counter evidence, subjects and sensitivity are combined; merge
+reports `deduplicated`. Explicit SUPERSEDE operations retain their historical
+meaning. User suppression takes precedence, including equivalent cross-node claims.
+Same-subject folding is deliberately broad: inspect the retained claim and evidence.
+
+Confidence retains `raw_confidence`. Caps are 0.55 for one source document, 0.7
+for two, 0.8 for three or more, and 0.9 for three or more with at least three known
+dates spanning seven days. Each distinct counter-evidence document divides the
+capped score by `1 + counter_document_count`. Statements and scored relations use
+the same calibration. Scores are evidence-breadth limits, not truth probabilities.
+
+```toml
+[tasks]
+batch_docs = 50
+batch_chars = 40000
+```
+
+Extraction respects both batch limits; a single oversized document remains intact
+so evidence offsets stay valid. All per-kind instructions require source-language
+text, calibrated confidence, and source-backed relations (density is a target,
+not permission to invent edges).
+
+Use `atlas tasks merge --all` to merge all accepted tasks, including idempotent
+replays. `atlas graph stats` reports retained table counts, active nodes/edges,
+isolated nodes, active edges per active node, stored statements/lines, average
+points per stored line and an active-proposition confidence histogram. Histogram
+bins include their upper bound. Empty denominators yield zero.
+
+The Chinese frontend includes reading/correction guidance on each tab, a vertical
+per-topic timeline with speaker/text/shift/outcome, and sensitivity filtering off
+by default. Sensitive outcome support also hides its derived point. Generated
+JSON remains a private full export; this display filter is not access control.
+
+Offline checks (no agents or paid APIs):
+
+```powershell
+C:\Python314\python.exe -m unittest discover -s tests
+C:\Python314\python.exe tools/leak_scan.py
 ```

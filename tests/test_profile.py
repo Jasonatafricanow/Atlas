@@ -58,7 +58,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(before, self.graph.stats())
         prop = dict(self.prop, confidence=0.8)
         self.apply("UPDATE", prop)
-        self.assertEqual(self.graph.get("propositions", "demo-prop")["confidence"], 0.8)
+        self.assertEqual(self.graph.get("propositions", "demo-prop")["confidence"], 0.7)
 
     def test_wrong_stale_merge_and_new_identity(self):
         task = self.apply()
@@ -126,10 +126,9 @@ class ProfileTests(unittest.TestCase):
         task = self.task()
         self.assertEqual(self.submit(task, [dict(op="ADD", prop=dict(new, prop_id="temporary")),
                          dict(op="UPDATE", prop=dict(new, prop_id="missing"))])["state"], "accepted")
-        before = self.graph.stats()
-        with self.assertRaises(ValueError):
-            merge(self.queue, self.graph, task)
-        self.assertEqual(before, self.graph.stats())
+        result = merge(self.queue, self.graph, task)
+        self.assertEqual(result["deduplicated"], 1)
+        self.assertIsNone(self.graph.get("propositions", "missing"))
 
     def test_invalid_correction_does_not_append(self):
         self.apply()
