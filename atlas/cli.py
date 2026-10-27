@@ -43,9 +43,14 @@ def main(argv=None):
     for name in ("ingest", "build", "all"):
         commands.add_parser(name).add_argument("--config", required=True)
     tasks = commands.add_parser("tasks").add_subparsers(dest="action", required=True)
-    for name in ("make", "list", "claim", "submit", "validate", "merge", "reap"):
+    for name in ("make", "list", "claim", "submit", "validate", "merge", "reap", "run"):
         parser = tasks.add_parser(name)
         parser.add_argument("--config")
+        if name == "run":
+            parser.add_argument("--runner", choices=["codex", "agy", "grok", "cmd"], required=True)
+            parser.add_argument("--parallel", type=int, default=4)
+            parser.add_argument("--print-cmd", action="store_true")
+            parser.add_argument("--timeout", type=float, default=660)
         if name == "make":
             parser.add_argument("--kind", choices=["extract_entities", "resolve_entities", "gen_propositions"], required=True)
             parser.add_argument("--input", help="resolution input JSON with candidates, nodes and documents")
@@ -134,6 +139,9 @@ def task_command(a):
             else:
                 result = queue.make(a.kind, read_json(Path(a.input)) if a.input else None)
         elif a.action == "list": result = queue.list()
+        elif a.action == "run":
+            from .tasks.runners import run
+            result = run(queue, a.runner, cfg or {}, a.parallel, a.print_cmd, a.timeout)
         elif a.action == "claim": result = queue.claim(a.task_id, a.owner, a.lease_seconds)
         elif a.action == "submit": result = queue.submit(a.task_id, a.file, a.owner)
         elif a.action == "validate": result = queue.validate(a.task_id)
@@ -146,7 +154,8 @@ def task_command(a):
                 graph.close()
         else: result = queue.reap()
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 1 if isinstance(result, dict) and result.get("state") == "rejected" else 0
+        records = result if isinstance(result, list) else [result]
+        return int(any(isinstance(r, dict) and r.get("state") == "rejected" for r in records))
     finally:
         store.db.close()
 

@@ -14,8 +14,15 @@ class Store:
         self.db.executescript(SCHEMA)
 
     def upsert(self, docs):
+        from .tasks.guard import sanitize
         n = 0
         for d in docs:
+            # Store the filtered canonical document so task evidence offsets and
+            # quote hashes refer to exactly the text that agents receive.
+            fields = d.to_dict()
+            for key in ("text", "author", "channel", "tags", "meta"):
+                fields[key] = sanitize(fields[key])
+            d = Document(**fields)
             self.db.execute("INSERT OR REPLACE INTO documents VALUES(?,?,?,?,?,?,?,?)",
                 (d.id, d.source, d.ts, d.text, d.author, d.channel,
                  json.dumps(d.tags, ensure_ascii=False), json.dumps(d.meta, ensure_ascii=False)))
