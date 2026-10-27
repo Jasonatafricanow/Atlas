@@ -1,6 +1,5 @@
 """Offline synthetic extraction replay; never calls an external service."""
 import argparse
-import hashlib
 import json
 import time
 from pathlib import Path
@@ -18,12 +17,11 @@ if args.mode == "missing":
     raise SystemExit(0)
 payload = json.loads((args.task_dir / "input.json").read_text(encoding="utf-8"))
 doc = payload["documents"][0]
-output = {"entities": [{"tmp_id": "synthetic", "type": "concept", "name": "Synthetic concept",
-          "aliases": [], "evidence": [{"doc_id": doc["id"], "span": [0, len(doc["text"])],
-          "quote_hash": hashlib.sha256(doc["text"].encode("utf-8")).hexdigest()[:12]}]}],
-          "relations": [], "statements": []}
+pointer = {"doc_id": doc.get("ref", doc["id"]), "lines": [1, 1]}
 if args.mode == "bad":
-    output["entities"][0]["evidence"][0]["quote_hash"] = "000000000000"
+    pointer["lines"] = [0, 0]
+output = {"entities": [{"tmp_id": "synthetic", "type": "concept", "name": "Synthetic concept",
+          "aliases": [], "evidence": [pointer]}], "relations": [], "statements": []}
 if args.stdout:
     print(json.dumps(output))
 else:

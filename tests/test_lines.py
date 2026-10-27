@@ -134,7 +134,7 @@ class LinesTests(unittest.TestCase):
         result = grouped_lines(graph)
         self.assertEqual(sorted(len(l["timeline"]) for l in result), [1, 3])
         merged = next(l for l in result if len(l["timeline"]) == 3)
-        self.assertEqual([p["shift"] for p in merged["timeline"]], ["first", None, None])
+        self.assertEqual([p["shift"] for p in merged["timeline"]], ["first", "unclear", "unclear"])
         first = lines[0]["timeline"][0]
         first.update(outcome="confirmed", outcome_statement_ids=[sources[1]["statement_id"]], outcome_reason="Fictional result")
         sources[1]["suppressed_by"] = "fiction-correction"
@@ -149,5 +149,5 @@ class LinesTests(unittest.TestCase):
         graph = dict(nodes=[dict(node_id="person", type="person")], statements=sources, propositions=[], lines=[])
         result = grouped_lines(graph)
         self.assertEqual(len(result), 16)
-        self.assertTrue(all(l["timeline"][0]["shift"] is None for l in result))
+        self.assertTrue(all(l["timeline"][0]["shift"] == "first" for l in result))
         self.assertEqual(grouped_lines(dict(nodes=[], statements=[], propositions=[], lines=[])), [])

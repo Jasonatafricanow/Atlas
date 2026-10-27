@@ -46,6 +46,11 @@ def _merge(queue, graph, identifier):
         output = read_json(path / "accepted.json")
         mapping = {}
         deduplicated = 0
+        # Restore canonical text only in memory for attribution and calibration.
+        if task["kind"] in ("extract_entities", "gen_propositions"):
+            payload["documents"] = [dict(d, text=queue.store.db.execute(
+                "SELECT text FROM documents WHERE id=?", (d["id"],)).fetchone()[0])
+                for d in payload["documents"]]
         documents = {d["id"]: d for d in payload["documents"]}
 
         def put_entity(entity, target=None):

@@ -103,7 +103,7 @@ class GraphStore:
         counts = {table: self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
                   for table in (*TABLES, "ops_log")}
         rows = {table: [json.loads(r[0]) for r in self.db.execute(f"SELECT data FROM {table}")]
-                for table in ("nodes", "edges", "propositions", "lines")}
+                for table in ("nodes", "edges", "propositions", "lines", "statements")}
         nodes = {n["node_id"] for n in rows["nodes"] if n.get("status") not in ("superseded", "rejected")}
         edges = [e for e in rows["edges"] if e.get("status") in ("proposed", "confirmed") and e["src"] in nodes and e["dst"] in nodes]
         connected = {e[k] for e in edges for k in ("src", "dst")}
@@ -117,4 +117,6 @@ class GraphStore:
                       edges_per_node=len(edges) / len(nodes) if nodes else 0,
                       avg_points_per_line=sum(len(l["timeline"]) for l in rows["lines"]) / len(rows["lines"]) if rows["lines"] else 0,
                       proposition_confidence_histogram=histogram)
+        from ..lenses.judgment_lines import grouped_lines, shift_stats
+        counts["displayed_shift_labels"] = shift_stats(grouped_lines(rows))
         return counts

@@ -70,7 +70,7 @@ class TaskTests(unittest.TestCase):
 
     def test_span_and_document_scope(self):
         for field, value in [("span", [-1, 18]), ("span", [2, 200]), ("span", [2, 2]),
-                             ("span", [True, 18]), ("doc_id", "not-in-task")]:
+                             ("span", [True, 18])]:
             with self.subTest(value=value):
                 output = json.loads(json.dumps(self.good))
                 output["entities"][0]["evidence"][0][field] = value

@@ -50,12 +50,12 @@ class M9Tests(unittest.TestCase):
         task = self.queue.make()[0]
         path = self.queue.locate(task)[1]
         payload = read_json(path / 'input.json')
-        self.assertEqual(payload['documents'][0]['text'], self.text)
+        self.assertNotIn('text', payload['documents'][0])
         self.assertIn('L2: Fictional B:', payload['documents'][0]['numbered_text'])
         good = dict(tmp_id='e', type='topic', name='Fictional garden', aliases=[],
                     evidence=[dict(doc_id='fiction', lines=[1, 1]), dict(doc_id='outside', lines=[1, 1]),
                               dict(doc_id='fiction', span=[0, 9999], quote_hash='0' * 12),
-                              dict(doc_id='outside', span=[0, 1], quote_hash='0' * 12)])
+                              dict(doc_id='outside', span=[0, 9999], quote_hash='0' * 12)])
         bad = dict(good, tmp_id='bad', evidence=[dict(doc_id='fiction', lines=[8, 9])])
         output = dict(entities=[good, bad], relations=[], statements=[])
         self.assertEqual(check_schema(output, schema_for('extract_entities.output')), [])

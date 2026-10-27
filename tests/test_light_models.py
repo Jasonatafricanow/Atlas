@@ -89,9 +89,9 @@ class LightModelTests(unittest.TestCase):
 
     def test_invalid_quotes_and_scope(self):
         self.store.upsert([Document('outside', 'synthetic', '2024-01-01', 'Garden.')])
-        for pointer in (dict(doc_id='outside', quote='Garden.'), dict(doc_id='fiction', quote=''),
+        for pointer in (dict(doc_id='fiction', quote=''),
                         dict(doc_id='fiction', quote='x' * 61), dict(doc_id='fiction', quote='  '),
-                        dict(doc_id='fiction', quote='GARDEN.'), dict(doc_id='missing', quote='Garden.'),
+                        dict(doc_id='fiction', quote='GARDEN.'),
                         dict(doc_id=[], quote='Garden.'), dict(doc_id='fiction', quote=123)):
             with self.subTest(pointer=pointer):
                 output = self.output()

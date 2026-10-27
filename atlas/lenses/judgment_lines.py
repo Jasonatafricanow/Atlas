@@ -58,7 +58,7 @@ def grouped_lines(graph):
         identifier = source["statement_id"]
         if identifier in covered:
             continue
-        point = dict(source, shift=None, reason="未评估变化", outcome="unknown", outcome_statement_ids=[], outcome_reason="")
+        point = dict(source, shift="unclear", shift_source="fallback", reason="未评估变化", outcome="unknown", outcome_statement_ids=[], outcome_reason="")
         groups.append(dict(points={identifier: point}, about=set(source["about"]), agent=False))
     # Connected components, not one card per statement or per shared node.
     merged = []
@@ -85,14 +85,29 @@ def grouped_lines(graph):
     result = []
     for group in merged:
         about = sorted(group["about"])
-        topic = group.get("topic_node_id") or next((i for i in about if nodes.get(i, {}).get("type") == "topic"), about[0])
+        topic = group.get("topic_node_id") or next((i for i in about if nodes.get(i, {}).get("type") == "topic"), about[0] if about else None)
+        if topic is None:
+            continue
         points = sorted(group["points"].values(), key=lambda p: (time_key(p.get("ts")), p["statement_id"]))
         for index, point in enumerate(points):
-            if index and point.get("shift") == "first":
-                point.update(shift=None, reason="跨批次连接，未评估变化")
+            shift = point.get("shift")
+            point.setdefault("shift_source", "model" if shift in (
+                "first", "same", "strengthen", "weaken", "reverse", "new_angle") else "repaired")
+            if index == 0 and shift != "first":
+                point.update(shift="first", shift_source="fallback" if point["shift_source"] == "fallback" else "repaired")
+            elif index and shift not in ("same", "strengthen", "weaken", "reverse", "new_angle", "unclear"):
+                point.update(shift="unclear", shift_source="repaired", reason="跨批次连接，未评估变化")
         result.append(dict(line_id="topic:" + topic, topic_node_id=topic, about=about,
                            title=nodes.get(topic, {}).get("name", topic) if any(p.get("sensitive") for p in points) else group.get("title") or nodes.get(topic, {}).get("name", topic), timeline=points))
     return result
+
+
+def shift_stats(lines):
+    counts = dict(model=0, repaired=0, fallback=0)
+    for line in lines:
+        for point in line["timeline"]:
+            counts[point["shift_source"]] += 1
+    return counts
 
 
 class JudgmentLinesLens(Lens):
@@ -100,4 +115,5 @@ class JudgmentLinesLens(Lens):
     title = "判断线"
 
     def build(self, docs):
-        return dict(type="judgment_lines", lines=grouped_lines(self.ctx["graph"]))
+        lines = grouped_lines(self.ctx["graph"])
+        return dict(type="judgment_lines", lines=lines, shift_stats=shift_stats(lines))

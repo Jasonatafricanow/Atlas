@@ -52,8 +52,8 @@ file viewing; `atlas.json` contains `nodes`, `edges`, `propositions`, `lenses`.
 This replaces the older `views` export key. Built-in lenses now project graph
 propositions, not raw document text. Custom lenses receive `ctx.graph` as well
 as the document argument. The judgment lens prefers accepted lines, then groups stored statements by shared
-about nodes. Connected topics form one timeline. Fallback points have unassessed
-shifts and unknown outcomes; no stance change is inferred. Legacy graphs without
+about nodes. Connected topics form one timeline. Fallback points have first/unclear
+shift labels and unknown outcomes; no stance change is inferred. Legacy graphs without
 statements can still display proposition history.
 Unknown dates stay unknown.
 
@@ -252,7 +252,7 @@ including propositions. Missing coverage does not reject otherwise valid lines.
 The lens coalesces accepted lines across batches when topic node IDs match or
 normalized character-bigram title Jaccard similarity is at least 0.6 (Unicode
 NFKC, case folding, alphanumeric characters only). Points are deduplicated and
-sorted again. Batch-boundary shifts not evaluated by an agent stay unknown.
+sorted again. Batch-boundary shifts not evaluated by an agent are labelled unclear.
 Fallback hub exclusion is unchanged: people and nodes above the existing
 `max(3, 25% of source records)` threshold do not join fallback groups. Empty
 graphs remain empty. All M8 tests use fictional local records without network
@@ -261,8 +261,8 @@ or external agents; run the unit suite and leak scanner with the commands above.
 ## M9 line citations, guard counters, and legacy references
 
 New extraction, proposition and clustering tasks use schema/prompt version 5.
-Earlier task directories remain intact. Extraction and proposition documents carry
-both unchanged canonical `text` and display-only `numbered_text` (`L1: ...`, etc.).
+Earlier task directories remain intact. M9 extraction and proposition documents carried
+both canonical `text` and display-only `numbered_text`; M10 replaces this with the compact format below.
 Cite `{ "doc_id": "fiction", "lines": [1, 2] }`: line numbers are 1-based,
 inclusive, and limited to six lines. Line boundaries follow Python `splitlines`;
 canonical spans include the final selected line's newline when present, preserving
@@ -331,3 +331,41 @@ option does not expose reference seed tables to any task.
 
 M9 acceptance uses fictional fixtures, temporary data directories, the local fake
 runner only, and no network. Run the full unit suite and leak scanner above.
+
+
+## M10 compact document refs and complete shift labels
+
+New extraction and proposition tasks use schema/prompt version 6; cluster tasks
+remain version 5. Existing task directories and canonical stored text are unchanged.
+Documents are sorted by canonical ID and assigned task-local `ref` values `d1`,
+`d2`, etc., restarting per batch. Each document contains `id`, `ref` and
+`numbered_text` beginning `[d1] L1: ...`; the duplicate raw `text` is omitted.
+Instructions say: cite documents only by their ref, e.g. `{doc_id: "d3", lines: [2, 4]}`.
+Canonical IDs and older quote/span/hash forms remain supported. Legacy raw-text
+input schemas remain valid. Attribution loads canonical source text at merge time,
+never reconstructing offsets from display labels.
+
+Evidence refs resolve before line, quote and span validation. Canonical IDs take
+precedence over refs. If a string document ID is unknown and exactly one input
+document exists, it maps to that document; multiple inputs never permit guessing.
+Missing store documents, invalid ranges and mismatched hashes still fail source
+checks. Equivalent normalized pointers are deduplicated within each evidence list.
+Propositions still require two distinct supports, retained counter evidence and
+correction precedence. Unknown-reference diagnostics contain no source text.
+
+Every displayed judgment point has a label: the first is `first`; unassessed later
+points and cross-batch starts are `unclear`. No stance change is inferred. Each
+point has `shift_source`: `model`, `repaired`, or `fallback`. New cluster validation
+preserves repair provenance through revalidation and merge. Legacy valid labels
+are counted as model labels, except legacy `unclear` without provenance is counted
+conservatively as repaired because its origin cannot be recovered.
+
+`atlas graph stats` reports `displayed_shift_labels` with separate `model`,
+`repaired` and `fallback` counts after grouping/deduplication. The judgment lens
+export includes the same counters as `shift_stats`. These count exported points
+before the UI sensitivity toggle, not stored line rows. Empty graphs report zeros
+and produce no lines. Historical records are not rewritten.
+
+M10 acceptance: run the full unittest suite and `tools/leak_scan.py` using
+`C:\Python314\python.exe`, fictional temporary data, and the local fake runner only.
+No network, paid APIs, commits or pushes are part of this milestone.

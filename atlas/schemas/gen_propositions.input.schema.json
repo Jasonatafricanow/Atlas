@@ -60,16 +60,32 @@
           },
           "numbered_text": {
             "type": "string"
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
           "id",
           "source",
           "ts",
-          "text",
           "meta"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "required": [
+              "numbered_text",
+              "ref"
+            ]
+          }
+        ]
       },
       "minItems": 1
     }

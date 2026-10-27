@@ -50,6 +50,18 @@ def numbered_text(text):
     return "\n".join(f"L{i}: {line}" for i, line in enumerate(text.splitlines(), 1))
 
 
+def compact_documents(documents):
+    """Assign deterministic task-local refs without duplicating canonical text."""
+    result = []
+    for index, document in enumerate(sorted(documents, key=lambda d: d["id"]), 1):
+        doc = dict(document)
+        ref = f"d{index}"
+        text = doc.pop("text")
+        doc.update(ref=ref, numbered_text=f"[{ref}] " + numbered_text(text))
+        result.append(doc)
+    return result
+
+
 def resolve_lines(pointer, documents):
     doc_id, bounds = pointer.get("doc_id"), pointer.get("lines")
     text = documents.get(doc_id) if isinstance(doc_id, str) else None
@@ -74,6 +86,20 @@ def normalize_output(output, task_input, store):
         row = store.db.execute("SELECT text FROM documents WHERE id=?", (doc["id"],)).fetchone()
         if row is not None:
             documents[doc["id"]] = row[0]
+    refs = {d["ref"]: d["id"] for d in task_input.get("documents", []) if d.get("ref")}
+    input_ids = {d["id"] for d in task_input.get("documents", [])}
+
+    def canonicalize(pointer):
+        if not isinstance(pointer, dict) or not isinstance(pointer.get("doc_id"), str):
+            return
+        identifier = pointer["doc_id"]
+        if identifier in input_ids:
+            return
+        if identifier in refs:
+            pointer["doc_id"] = refs[identifier]
+        elif len(input_ids) == 1:
+            pointer["doc_id"] = next(iter(input_ids))
+
     issues = []
 
     def walk(value, path="$"):
@@ -84,6 +110,7 @@ def normalize_output(output, task_input, store):
             used = set()
             for key in ("evidence", "counter_evidence"):
                 for pointer in value.get(key, []) if isinstance(value.get(key), list) else []:
+                    canonicalize(pointer)
                     if isinstance(pointer, dict) and isinstance(pointer.get("span"), list):
                         span = pointer["span"]
                         if len(span) == 2 and all(type(n) is int for n in span):
@@ -111,7 +138,8 @@ def normalize_output(output, task_input, store):
                                     or not 0 <= span[0] < span[1] <= len(text)):
                                 issues.append(f"{path}.{key}[{index}]: invalid source span removed")
                                 continue
-                        kept.append(pointer)
+                        if pointer not in kept:
+                            kept.append(pointer)
                     value[key] = kept
                 else:
                     walk(items, f"{path}.{key}")
