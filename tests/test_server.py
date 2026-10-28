@@ -134,7 +134,11 @@ class ServerTests(unittest.TestCase):
         empty = self.root / "empty"
         GraphStore(empty).close()
         data = ReadModel(empty).get("home", {})
-        self.assertEqual(data, {"lines": [], "nodes": [], "propositions": []})
+        self.assertEqual({key: data[key] for key in ("lines", "nodes", "propositions")},
+                         {"lines": [], "nodes": [], "propositions": []})
+        self.assertEqual(data["derived"], {"point_count": 0, "line_count": 0,
+                         "outcome_counts": {"supported": 0, "contradicted": 0, "unknown": 0},
+                         "shift_count": 0, "confirmed_count": 0, "pending_count": 0})
 
     def test_private_document_text_and_extra_metadata_never_enter_list_api(self):
         with contextlib.closing(sqlite3.connect(self.root / "corpus.sqlite")) as db:

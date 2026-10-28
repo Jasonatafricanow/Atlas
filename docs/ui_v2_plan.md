@@ -33,3 +33,16 @@ page was inspected for structure and CSS, without exporting its embedded content
   source excerpts in list responses, request-body logs or browser content cache.
 - Preserve `web/index.html` for offline exports; serve the v2 shell separately.
 - Only synthetic fixtures and aggregate schema conclusions enter this repository.
+
+## Round 2
+
+1. Add pure read-time derivations after sensitivity and correction projection:
+   latest dated stance, point outcome counts, stored shift counts, dated span,
+   safe session names and home aggregates. Preserve ambiguous/unknown values;
+   do not write graph tables or execute producers. Verify with fictional fixtures.
+2. Centralize display time formatting; contain the horizontal timeline with a
+   live visible-position indicator; cap graph zoom and retain fixed node sizes.
+   Replace cool dark colors with warm paper/ink colors and amber focus glow.
+3. Document every data gap, independent future module contracts and unexecuted
+   producer templates. Run full Python/Node acceptance and the unchanged scanner,
+   inspect fictional browser renders if available, and attempt one local commit.

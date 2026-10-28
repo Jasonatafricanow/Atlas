@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .chat import time_key
 from .profile import corrections
+from .web_derive import derive_home, derive_line, session_name
 
 
 FIELDS = {
@@ -107,6 +108,7 @@ class ReadModel:
         for group in groups.values():
             if group["timeline"]:
                 group["timeline"].sort(key=lambda p: (time_key(p["source"].get("ts")), p["statement_id"]))
+                group["derived"] = derive_line(group["timeline"])
                 result.append(group)
         return sorted(result, key=lambda g: g["topic_node_id"])
 
@@ -126,7 +128,7 @@ class ReadModel:
             pointer = record.get(field, [])[index]
         except (ValueError, IndexError):
             raise KeyError from None
-        result = {"pointer": pointer}
+        result = {"pointer": pointer, "derived": {"session_display_name": session_name(None, {})}}
         if not (self.root / "corpus.sqlite").is_file():
             return result
         with closing(connect(self.root / "corpus.sqlite")) as db:
@@ -143,7 +145,8 @@ class ReadModel:
         if hashlib.sha256(quote.encode()).hexdigest()[:12] != pointer["quote_hash"]:
             raise ValueError("invalid evidence")
         result.update(quote=quote, before=text[max(0, start-240):start], after=text[end:end+240],
-                      ts=ts, author=author, channel=channel)
+                      ts=ts, author=author)
+        result["derived"]["session_display_name"] = session_name(channel, json.loads(meta or "{}"))
         return result
 
     def get(self, route, params):
@@ -163,7 +166,8 @@ class ReadModel:
                 raise KeyError
             return {"line": line, "node": nodes[line["topic_node_id"]]}
         if route == "home":
-            return {"lines": lines, "nodes": list(nodes.values()), "propositions": rows["propositions"]}
+            return {"lines": lines, "nodes": list(nodes.values()), "propositions": rows["propositions"],
+                    "derived": derive_home(lines, rows["propositions"])}
         if route == "entities":
             return {"nodes": list(nodes.values())}
         if route == "entity":

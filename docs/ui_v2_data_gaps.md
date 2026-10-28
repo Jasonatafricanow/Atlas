@@ -41,3 +41,12 @@ API 中的 `quote` / `before` / `after` 是既存 text 的直接切片，不是�
 本期已包含首页、判断线、实体的一跳局部图与反链；没有新增编辑或纠正 API。
 完整纠正工作台、原文全文搜索、多跳关系控制、时间泳道与主题层级留待后续授权。
 摘要、当前立场、准确率和稳定性需要独立定义及有证据的存储支持，不能仅靠 UI 补齐。
+
+## Round 2 supplement
+
+Round 2 implements labelled read-time derivations and resolves the display-only
+current-stance/count/span/session-name gaps within explicit limits. The Phase 1
+inventory above is historical; the authoritative per-gap status and future module
+proposal are now in [ui_v2_gap_plan.md](ui_v2_gap_plan.md). Semantic summaries,
+topic hierarchy, fixed stance vocabulary, accuracy and stability remain absent.
+Unexecuted producer contracts are in [ui_v2_task_templates.md](ui_v2_task_templates.md).

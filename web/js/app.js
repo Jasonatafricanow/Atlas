@@ -1,5 +1,6 @@
 import {read} from './db.js';
 import {renderGraph} from './graph.js';
+import {mountTimeline} from './timeline.js';
 import * as views from './views.js';
 
 const main = document.getElementById('content');
@@ -9,6 +10,7 @@ const search = document.getElementById('search');
 const results = document.getElementById('search-results');
 let pageRequest, evidenceRequest, searchRequest, searchTimer;
 let destroyGraph = () => {};
+let destroyTimeline = () => {};
 let pageVersion = 0, drawerVersion = 0, searchVersion = 0;
 const sensitive = () => document.getElementById('sensitive').checked ? '1' : '0';
 const errorView = error => `<div class="empty" role="alert">${views.esc(error.message)} <button data-retry>重试</button></div>`;
@@ -64,6 +66,8 @@ async function route() {
   closeEvidence();
   clearSearch();
   destroyGraph();
+  destroyTimeline();
+  destroyTimeline = () => {};
   destroyGraph = () => {};
   main.innerHTML = views.loading;
   document.getElementById('toc').replaceChildren();
@@ -88,6 +92,7 @@ async function route() {
     if (version !== pageVersion) return;
     main.innerHTML = render(data);
     document.getElementById('toc').innerHTML = views.tocView(toc);
+    if (page === 'line') destroyTimeline = mountTimeline(main);
     if (page === 'entity') {
       try { destroyGraph = renderGraph(data); }
       catch { document.getElementById('graph-status').textContent = '关系图暂不可用，请阅读下方完整关系列表。'; }
@@ -143,7 +148,7 @@ document.getElementById('theme').addEventListener('click', () => {
 document.getElementById('sensitive').addEventListener('change', route);
 window.addEventListener('hashchange', route);
 function discard() {
-  pageVersion++; pageRequest?.abort(); closeEvidence(); clearSearch(); destroyGraph(); destroyGraph = () => {};
+  pageVersion++; pageRequest?.abort(); closeEvidence(); clearSearch(); destroyGraph(); destroyGraph = () => {}; destroyTimeline(); destroyTimeline = () => {};
   document.getElementById('sensitive').checked = false;
   main.replaceChildren(); document.getElementById('toc').replaceChildren();
 }

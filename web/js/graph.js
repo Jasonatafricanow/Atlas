@@ -19,7 +19,7 @@ export function renderGraph(data) {
       {selector: ':selected', style: {'border-width': 4, 'border-color': color('--accent')}},
     ],
     layout: {name: 'fcose', quality: 'default', animate: false, padding: 45, nodeDimensionsIncludeLabels: true},
-    minZoom: 0.15, maxZoom: 3, wheelSensitivity: 0.3,
+    minZoom: 0.15, maxZoom: 1, wheelSensitivity: 0.3,
   });
   cy.on('mouseover', 'node', event => {
     cy.elements().addClass('dim');
@@ -27,10 +27,11 @@ export function renderGraph(data) {
   });
   cy.on('mouseout', 'node', () => cy.elements().removeClass('dim'));
   cy.on('tap', 'node', event => { location.hash = `#/entity/${encodeURIComponent(event.target.id())}`; });
-  const fit = () => cy.fit(undefined, 45);
+  const fit = () => { cy.fit(undefined, 45); cy.center(); };
+  fit();
   const button = document.querySelector('[data-fit]');
   button?.addEventListener('click', fit);
-  const resize = new ResizeObserver(() => { cy.resize(); });
+  const resize = new ResizeObserver(() => { cy.resize(); fit(); });
   resize.observe(container);
   return () => { resize.disconnect(); button?.removeEventListener('click', fit); cy.destroy(); };
 }
