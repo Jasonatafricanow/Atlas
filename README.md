@@ -142,3 +142,11 @@ include density, isolation, statement/line counts and confidence distribution.
 See [task contracts and offline acceptance](docs/AGENT_TASKS.md#m6-quality-contracts)
 for schemas, calibration, limitations and the synthetic-only test commands.
 This quality milestone does not add the optional MCP server.
+
+## Local UI v2
+
+Run `python -m atlas serve --data-dir <explicit-data-directory>` to read an
+existing graph through the new local, read-only UI. It includes Chinese topic
+timelines, on-demand evidence, search, light/dark themes and entity relations.
+See [UI v2 usage](docs/ui_v2.md) and [data gaps](docs/ui_v2_data_gaps.md).
+The existing offline `build/all` export remains available.

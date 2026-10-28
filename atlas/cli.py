@@ -57,6 +57,10 @@ def build(cfg, st=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="atlas")
     commands = ap.add_subparsers(dest="cmd", required=True)
+    server = commands.add_parser("serve", help="read-only local UI")
+    server.add_argument("--data-dir", required=True)
+    server.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost"))
+    server.add_argument("--port", type=int, default=8765)
     for name in ("ingest", "build", "all"):
         commands.add_parser(name).add_argument("--config", required=True)
     seed = commands.add_parser("seed").add_subparsers(dest="action", required=True)
@@ -102,6 +106,10 @@ def main(argv=None):
             parser.add_argument("--note", default="")
     a = ap.parse_args(argv)
     try:
+        if a.cmd == "serve":
+            from .server import serve
+            serve(a.data_dir, a.host, a.port)
+            return 0
         if a.cmd in ("tasks", "graph", "profile"):
             return task_command(a)
         cfg = C.load(a.config)
