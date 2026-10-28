@@ -109,7 +109,11 @@ def extract_json(text):
         start, end = text.find("{"), text.rfind("}")
         if start < 0 or end <= start:
             raise
-        value = json.loads(text[start:end + 1])
+        try:
+            value = json.loads(text[start:end + 1])
+        except ValueError:
+            # JSON followed by trailing prose or a second object: keep the first complete object.
+            value = json.JSONDecoder().raw_decode(text[start:])[0]
     for key in ("structured_output", "structuredOutput", "result", "output", "response", "text"):
         if isinstance(value, dict) and key in value and not {"entities", "operations", "decisions"} & set(value):
             inner = value[key]
