@@ -95,11 +95,14 @@ class ProfileTests(unittest.TestCase):
     def test_validation_support_hash_counter_and_subject(self):
         task = self.task()
         for changes in (dict(evidence=self.evidence[:1]), dict(evidence=self.evidence[:1] * 2),
-                        dict(subject_node_ids=["missing"]), dict(confidence=1.1),
+                        dict(confidence=1.1),
                         dict(counter_evidence=self.evidence[:1])):
             with self.subTest(changes=changes):
                 result = self.submit(task, [dict(op="ADD", prop=dict(self.prop, **changes))])
                 self.assertEqual(result["state"], "rejected")
+        # Out-of-subgraph subjects are repaired (dropped; task node kept), not rejected.
+        repaired = self.submit(task, [dict(op="ADD", prop=dict(self.prop, prop_id="demo-prop-2", subject_node_ids=["missing"]))])
+        self.assertEqual(repaired["state"], "accepted")
         bad = copy.deepcopy(self.prop)
         bad["evidence"][0]["quote_hash"] = "000000000000"
         self.assertEqual(self.submit(task, [dict(op="ADD", prop=bad)])["state"], "rejected")

@@ -101,8 +101,9 @@ def validate_output(kind, output, task_input, store):
             if prop["prop_id"] in seen:
                 errors.append("$.ops: duplicate proposition identity")
             seen.add(prop["prop_id"])
-            if task_input["node_id"] not in prop["subject_node_ids"] or not set(prop["subject_node_ids"]) <= nodes:
-                errors.append("$.ops.prop.subject_node_ids: outside subgraph")
+            # Repair instead of reject: keep in-subgraph subjects and always include the task node.
+            subjects = [n for n in prop["subject_node_ids"] if n in nodes and n != task_input["node_id"]]
+            prop["subject_node_ids"] = [task_input["node_id"], *dict.fromkeys(subjects)]
             support = {json.dumps(e, sort_keys=True) for e in prop["evidence"]}
             counter = {json.dumps(e, sort_keys=True) for e in prop["counter_evidence"]}
             if len(support) < 2 or support & counter:

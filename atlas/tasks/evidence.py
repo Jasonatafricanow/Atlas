@@ -65,14 +65,17 @@ def compact_documents(documents):
 def resolve_lines(pointer, documents):
     doc_id, bounds = pointer.get("doc_id"), pointer.get("lines")
     text = documents.get(doc_id) if isinstance(doc_id, str) else None
-    if (set(pointer) != {"doc_id", "lines"} or text is None
-            or not isinstance(bounds, list) or len(bounds) != 2
+    if (text is None or not isinstance(bounds, list) or len(bounds) not in (1, 2)
             or not all(type(n) is int for n in bounds)):
         return None
     lines = text.splitlines(keepends=True)
-    first, last = bounds
-    if not 1 <= first <= last <= len(lines) or last - first >= 6:
+    first, last = bounds[0], bounds[-1]
+    if last < first:
+        first, last = last, first
+    # Repair instead of reject: clamp to the document and to at most 6 lines.
+    if not 1 <= first <= len(lines):
         return None
+    last = min(last, len(lines), first + 5)
     start = sum(map(len, lines[:first - 1]))
     end = sum(map(len, lines[:last]))
     return dict(doc_id=doc_id, span=[start, end],

@@ -40,10 +40,15 @@ class M9Tests(unittest.TestCase):
         start = self.text.index('Fictional B')
         self.assertEqual(pointer['span'], [start, len(self.text)])
         self.assertEqual(pointer['quote_hash'], hashlib.sha256(self.text[start:].encode()).hexdigest()[:12])
-        for bounds in ([0, 1], [2, 1], [1, 4], [True, 2], [1], '1,2'):
+        for bounds in ([0, 1], [9, 9], [True, 2], '1,2'):
             self.assertIsNone(resolve_lines(dict(doc_id='fiction', lines=bounds), docs))
         self.assertIsNone(resolve_lines(dict(doc_id='outside', lines=[1, 1]), docs))
-        self.assertIsNone(resolve_lines(dict(doc_id='d', lines=[1, 7]), {'d': 'a\n' * 7}))
+        # Repairs: reversed, overlong, single-number and past-the-end ranges are clamped.
+        self.assertEqual(resolve_lines(dict(doc_id='fiction', lines=[3, 2]), docs), pointer)
+        self.assertEqual(resolve_lines(dict(doc_id='fiction', lines=[2, 40]), docs), pointer)
+        self.assertIsNotNone(resolve_lines(dict(doc_id='fiction', lines=[1]), docs))
+        seven = 'a\n' * 7
+        self.assertEqual(resolve_lines(dict(doc_id='d', lines=[1, 7]), {'d': seven})['span'], [0, 12])
         self.assertIsNotNone(resolve_lines(dict(doc_id='d', lines=[1, 6]), {'d': 'a\n' * 7}))
 
     def test_extract_partial_and_all_invalid(self):
