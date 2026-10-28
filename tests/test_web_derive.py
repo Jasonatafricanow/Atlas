@@ -8,7 +8,7 @@ from pathlib import Path
 
 from atlas.graph.store import GraphStore
 from atlas.web_data import ReadModel
-from atlas.web_derive import derive_home, derive_line, session_name
+from atlas.web_derive import derive_home, derive_line, derive_pending, session_name
 from examples.tasks_demo.seed_ui_v2 import seed
 
 
@@ -112,3 +112,40 @@ class DerivationTests(unittest.TestCase):
             visible = ReadModel(root, sensitive=True).get('home', {})
             self.assertEqual(visible['derived']['outcome_counts']['supported'], 1)
             self.assertEqual(visible['derived']['pending_count'], 0)
+
+
+class Round4DerivationTests(unittest.TestCase):
+    def test_accuracy_threshold_and_stability_minimum(self):
+        points = [point('a', outcomes=('confirmed',)), point('b', outcomes=('refuted',), shift='reverse')]
+        self.assertIsNone(derive_line(points)['accuracy'])
+        self.assertIsNone(derive_line(points)['stability'])
+        self.assertEqual(derive_line(points)['accuracy_basis'], '已知 2 / 共 2')
+        points.append(point('c', outcomes=('confirmed',)))
+        result = derive_line(points)
+        self.assertAlmostEqual(result['accuracy'], 2 / 3)
+        self.assertEqual(result['stability'], 0.5)
+        points.append(point('d', outcomes=('mixed',)))
+        self.assertEqual(derive_line(points)['accuracy_basis'], '已知 3 / 共 4')
+        self.assertEqual(derive_line([])['accuracy_basis'], '已知 0 / 共 0')
+        self.assertEqual(derive_line([point(str(i)) for i in range(3)])['stability'], 1)
+        points[1]['source']['status'] = 'rejected'
+        self.assertEqual(derive_line(points)['reversal_count'], 0)
+        self.assertIsNone(derive_line(points)['accuracy'])
+
+    def test_pending_lexicographic_rank_unknowns_and_template(self):
+        props = [dict(prop_id=i, text='虚构试种', status='proposed', confidence=c,
+                      subject_node_ids=subjects, ts=ts)
+                 for i, c, subjects, ts in [('a', .7, ['garden'], '2025-02-01'),
+                                           ('b', .2, [], None),
+                                           ('c', .2, ['garden'], '2025-01-01'),
+                                           ('d', .2, ['garden'], '2025-03-01'),
+                                           ('e', None, ['garden'], '2025-04-01')]]
+        props.append(dict(props[0], prop_id='suppressed', suppressed_by='fiction'))
+        before = copy.deepcopy(props)
+        result = derive_pending([{'topic_node_id': 'garden', 'timeline': []}], props)
+        self.assertEqual([p['prop_id'] for p in result], ['d', 'c', 'b', 'a', 'e'])
+        self.assertEqual([p['priority'] for p in result], [1, 2, 3, 4, 5])
+        self.assertEqual(result[0]['affected_line_count'], 1)
+        self.assertIn('虚构试种', result[0]['question'])
+        self.assertEqual(result[2]['recency_field'], None)
+        self.assertEqual(props, before)

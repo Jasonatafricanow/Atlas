@@ -50,3 +50,13 @@ inventory above is historical; the authoritative per-gap status and future modul
 proposal are now in [ui_v2_gap_plan.md](ui_v2_gap_plan.md). Semantic summaries,
 topic hierarchy, fixed stance vocabulary, accuracy and stability remain absent.
 Unexecuted producer contracts are in [ui_v2_task_templates.md](ui_v2_task_templates.md).
+
+
+## Round 4 决定（优先于上文历史提案）
+
+本轮已实现独立 entities.sqlite 的提及索引和未执行的合并建议，并补齐标注
+“派生”的结果准确率、判断线稳定性、待确认排序与模板问题；具体口径见
+[ui_v2.md](ui_v2.md)。原有功能与模板保留。
+主题/层级、固定立场维度、对错关系及 Line 概括改为 MR-Mem 原生能力需求，
+不在 ATLAS 创建这些表、不运行任何生成任务。对应接口、空状态与设计冲突见
+[for_mrmem_requirements.md](for_mrmem_requirements.md)。实体摘要仍为空状态。

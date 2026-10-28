@@ -5,7 +5,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from .web_data import ReadModel
+from .backends.atlas_sqlite import AtlasSqliteBackend
+from .backends.base import dispatch
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 
@@ -40,7 +41,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path.startswith("/api/"):
                 params = {k: v[-1] for k, v in parse_qs(url.query).items()}
-                result = ReadModel(self.server.data_dir, params.get("sensitive") == "1").get(url.path[5:], params)
+                backend = self.server.backend_factory(self.server.data_dir, params.get("sensitive") == "1")
+                result = dispatch(backend, url.path[5:], params)
                 return self.reply(200, json.dumps(result, ensure_ascii=False).encode())
             path = "app.html" if url.path == "/" else url.path.lstrip("/")
             if path not in self.server.assets:
@@ -61,13 +63,14 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_POST
 
 
-def create_server(data_dir, host="127.0.0.1", port=8765):
+def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend):
     if host not in ("127.0.0.1", "localhost"):
         raise ValueError("serve binds to loopback only")
     if not data_dir or not (Path(data_dir) / "graph.sqlite").is_file():
         raise ValueError("serve requires an existing graph.sqlite in an explicit data directory")
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.data_dir = Path(data_dir).resolve()
+    server.backend_factory = backend_factory
     server.assets = {"app.html", "theme.css"} | {
         p.relative_to(WEB).as_posix() for p in (WEB / "js").rglob("*.js")
         if p.resolve().is_relative_to(WEB)}

@@ -85,3 +85,50 @@ python tools/leak_scan.py
 不展示文件路径。完整口径及独立未来模块设计见
 [ui_v2_gap_plan.md](ui_v2_gap_plan.md)，未执行的任务模板见
 [ui_v2_task_templates.md](ui_v2_task_templates.md)。
+
+
+## Round 4 · 适配器与独立实体索引
+
+服务器通过 `atlas/backends/base.py` 的八方法 Backend 协议读取。
+ATLAS 包装器保留原路由和错误码；证据对象新增 `ref`（char_span），旧指针仍保留。
+MR-Mem 仅有未连接的只读骨架，不可选用为运行后端。
+完整原生能力需求见 [for_mrmem_requirements.md](for_mrmem_requirements.md)。
+
+判断线准确率为派生支持数 / 已知结果数，已知至少 3 条才展示百分比，
+否则显示“已知 n / 共 m”。稳定性为派生 `1 − reversals/(points−1)`，至少 3 点；
+转向计非首点中任一已有 reverse 标注，每点最多一次，失效来源不计。
+没有转向标注不证明已评估过转换。上述指标不替代事实核验或画像稳定性排序。
+
+待确认命题依次按置信度升序、关联主题线数降序、时间降序排列；未知置信度最后，
+同层级未知时间最后，最终以 ID 稳定排序。关联包含命题本身或主体关联的可见线。
+时间取有效 ts，缺失时 observed_at 只作排序元数据，不充当事实时间。
+确认问题来自 `atlas/templates/pending_question.txt`，两者均标“派生”。
+
+独立实体命令必须显式指定数据目录，只打印 JSON 数量：
+
+```powershell
+$env:ATLAS_DATA_DIR = "$PWD/_demo_out/ui-v2-r4-data"
+$env:ATLAS_OUT_DIR = "$PWD/_demo_out/ui-v2-r4-site"
+C:/Python314/python.exe -m examples.tasks_demo.seed_ui_v2 --data-dir $env:ATLAS_DATA_DIR
+C:/Python314/python.exe -m atlas index-mentions --data-dir $env:ATLAS_DATA_DIR
+C:/Python314/python.exe -m atlas suggest-merges --data-dir $env:ATLAS_DATA_DIR
+```
+
+仅写 `entities.sqlite`，graph/corpus 始终只读。mentions_index 保存节点/文档 ID、
+字符偏移/长度、匹配的已有别名及索引建立时间，不复制文档正文或上下文。
+匹配名称与别名的原始拼写；ASCII 至少 3 个字母数字字符并检查单词边界，
+其他名称至少 2 个字母数字字符；敏感节点、依赖敏感文档的节点与敏感文档跳过。
+索引建立时间仅表示执行时间，反链时间读取文档 ts。重建会替换派生提及，
+源文本改变后应重建；未重建的切片如失配，抽屉拒绝显示。
+
+合并建议只比较同类型节点：NFKC/casefold/去空白标点后名称相同；规范化名称
+至少 4 字的包含关系；至少共同出现于 3 个文档且文档集合 Jaccard ≥ 0.5。
+分数为规则相似度，不是实体相同概率。同文共现尤其可能只是两个相关实体。
+建议始终标“建议合并（未执行）”，不会调用 graph merge，也不会生成别名。
+重跑更新 suggested 候选，保留可能已有的其他审核状态。
+
+实体页保留 Round 2 关联表态、命题及一跳图，增加提及数量/文档/时间及建议。
+未建索引、无可见提及、无建议各有空状态。提及按钮仍请求 `/api/evidence`，
+`kind=mentions,id=node_id,index=列表位置,field=该行token`；服务重新验证当前
+节点/别名/文档可见性及 token，再走同一个 offset/hash 校验切片路径。
+没有任意 doc_id/span 读取入口。开启敏感显示也不会扩展实体索引的来源范围。

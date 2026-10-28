@@ -46,3 +46,18 @@ page was inspected for structure and CSS, without exporting its embedded content
 3. Document every data gap, independent future module contracts and unexecuted
    producer templates. Run full Python/Node acceptance and the unchanged scanner,
    inspect fictional browser renders if available, and attempt one local commit.
+
+## Round 4
+
+1. Introduce the eight-method read-only Backend protocol, an ATLAS wrapper and
+   an unconnected MR-Mem skeleton. Add unified evidence refs without removing
+   existing payload fields; check route parity and both pointer forms.
+2. Add the authorized derived accuracy/stability and deterministic pending
+   ranking with a local question template, preserving corrections and unknowns.
+3. Build rule-based mentions and merge suggestions in entities.sqlite only.
+   Expose pointer-only backlinks and verified on-demand excerpts; retain Round 2
+   linked records and explicit summary gaps. Test graph byte-for-byte integrity.
+4. Document Chinese MR-Mem requirements without opening that workspace. Run
+   full Python/JS/scanner acceptance, then the two count-only commands against
+   the designated existing sample copy, subject to filesystem permissions.
+   Attempt one local commit; never push or bypass hooks.

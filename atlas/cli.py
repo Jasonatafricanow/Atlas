@@ -57,6 +57,8 @@ def build(cfg, st=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="atlas")
     commands = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("index-mentions", "suggest-merges"):
+        commands.add_parser(name).add_argument("--data-dir", required=True)
     server = commands.add_parser("serve", help="read-only local UI")
     server.add_argument("--data-dir", required=True)
     server.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost"))
@@ -106,6 +108,16 @@ def main(argv=None):
             parser.add_argument("--note", default="")
     a = ap.parse_args(argv)
     try:
+        if a.cmd in ("index-mentions", "suggest-merges"):
+            from .entities import index_mentions, suggest_merges
+            import sqlite3
+            operation = index_mentions if a.cmd == "index-mentions" else suggest_merges
+            try:
+                result = operation(a.data_dir)
+            except (sqlite3.Error, OSError, ValueError):
+                ap.error("entity index unavailable; check the explicit data directory and permissions")
+            print(json.dumps(result))
+            return 0
         if a.cmd == "serve":
             from .server import serve
             serve(a.data_dir, a.host, a.port)

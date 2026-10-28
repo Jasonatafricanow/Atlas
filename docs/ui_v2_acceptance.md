@@ -109,3 +109,76 @@ unknown counts, explicit shift count, known time span, safe source-session displ
 name, and home line/point/confirmed/pending counts. Summaries, topic hierarchy,
 fixed stance vocabulary, accuracy, stability and other semantic gaps remain
 unproduced as required; their plans and text task templates are delivered.
+
+
+## Round 4 acceptance
+
+Implemented on `ui-v2`, baseline `f10d761`. No MR-Mem workspace was opened or
+connected, no agent/LLM jobs or paid APIs ran, and no dependencies were downloaded.
+Round 2 functionality, documents and templates remain. Source fixtures are fictional.
+
+### Implemented scope and changed files
+
+- `atlas/backends/{__init__,base,atlas_sqlite,mrmem}.py`, `atlas/server.py`:
+  eight-method read-only protocol and dispatch, ATLAS wrapper, unconnected MR-Mem
+  skeleton, validated char_span/message_paragraphs types and fake-backend coverage.
+- `atlas/web_data.py`: additive refs in evidence payloads; entity metadata
+  backlinks and suggestions; token-bound mention requests share the verified drawer
+  slice path. Existing linked statements, propositions and relationships remain.
+- `atlas/web_derive.py`, `atlas/templates/pending_question.txt`, `web/js/views.js`:
+  labelled accuracy/stability, pending priority and template questions, counts,
+  empty states and lazy mention actions. No new graph facts or semantic tables.
+- `atlas/entities/{__init__,index}.py`, `atlas/cli.py`: explicit-path, count-only
+  CLI commands; independent mentions/suggestions tables. Names/aliases only in
+  matched_alias; no corpus body/context columns. Suggestions never perform merges.
+- `tests/test_backends.py`, `tests/test_entities.py`, `tests/test_web_derive.py`,
+  `tests/ui_v2.test.mjs`: route parity, injected paragraph backend over HTTP,
+  derived thresholds/order/corrections, index privacy/Unicode/short-name guards,
+  unchanged graph/corpus bytes, stale evidence rejection, CLI and rendering tests.
+- `docs/for_mrmem_requirements.md`: all eight Chinese requirements with UI usage,
+  temporary substitute and desired interface shapes, including both supplied
+  LCE design conflicts. No MR-Mem implementation or architectural decisions.
+- `docs/ui_v2.md`, `docs/ui_v2_plan.md`, `docs/ui_v2_data_gaps.md`,
+  `docs/ui_v2_gap_plan.md`, `docs/ui_v2_task_templates.md`, this acceptance file:
+  current contracts and explicit supersession notes preserving historical proposals.
+
+### Automated results
+
+- `C:/Python314/python.exe -m pytest -q tests`: **121 passed, 27 subtests passed**,
+  no failures or skips; 62.81 seconds in the final full run. Existing ignored pytest
+  installation supplied via PYTHONPATH; cache and demo environment paths explicitly
+  point to ignored demo output. No new runtime dependencies.
+- `node --test tests/ui_v2.test.mjs`: **12 passed**, no failures/skips.
+- Unchanged leak scanner: **0 hits**, 0 denylist terms, across the complete source
+  acceptance snapshot. Original worktree scan fails on PermissionError reading the
+  pre-existing tracked `examples/synthetic_corpus/life_notes.jsonl`. Snapshot is
+  a Git archive of committed HEAD with all 23 changed/new task files overlaid and
+  byte-compared. Every snapshot source file is passed to the unchanged scanner;
+  nothing is excluded to obtain the clean result. Protected working fixture is
+  untouched. Snapshot is `_demo_out/ui-v2-r4-acceptance`.
+- `git diff --check`: passed. Hooks and leak scanner unchanged.
+- Fictional CLI smoke using `seed_ui_v2`: index reports **2 nodes, 3 documents,
+  0 mentions**; suggestions reports **2 nodes, 0 suggestions**. The seed's full
+  entity names/alias do not occur verbatim in its corpus. The separate entity test
+  fixture exercises nonempty output: **6 visible nodes, 3 documents, 18 mentions**,
+  all three suggestion rules, and idempotent counts with graph/corpus byte equality.
+
+### Incomplete environment-dependent acceptance
+
+The designated sample-copy directory already existed, so the original sample
+was not copied again or written. Both requested CLI commands were attempted on
+that copy. Both failed with SQLite **SQLITE_CANTOPEN** at the explicit writable
+connection for `entities.sqlite` (index.py, not graph/corpus). The directory is
+outside this session's writable roots. No sample counts were produced; fictional
+smoke counts above are not replacements for those requested sample counts.
+No private content was printed or copied into this repository.
+
+**Local commit blocked:** named-file staging failed with
+`Unable to create .git/index.lock: Permission denied`. Pre-commit was not reached;
+no hooks were disabled or bypassed, no commit was created and no push occurred.
+All changes remain in the original worktree for review.
+
+**Rendered visual acceptance unverified:** opening the local fictional demo with
+the browser tool returned “The browser access host is unavailable”. JS rendering,
+controller and offline graph tests pass, but no desktop/mobile screenshot is
+claimed. The documented demo is available for a later browser review.

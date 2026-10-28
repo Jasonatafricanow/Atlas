@@ -6,6 +6,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .chat import time_key
+from .backends.base import char_span_ref
 from .profile import corrections
 from .web_derive import derive_home, derive_line, session_name
 
@@ -25,7 +26,8 @@ def project(row, fields):
     result = {key: row[key] for key in fields if key in row}
     for field in ("evidence", "counter_evidence"):
         if field in result:
-            result[field] = [{key: pointer[key] for key in ("doc_id", "span", "quote_hash") if key in pointer}
+            result[field] = [dict({key: pointer[key] for key in ("doc_id", "span", "quote_hash") if key in pointer},
+                                  ref=char_span_ref(pointer))
                              for pointer in result[field]]
     return result
 
@@ -114,6 +116,20 @@ class ReadModel:
 
     def evidence(self, rows, params):
         table = params.get("kind")
+        if table == "mentions":
+            from .entities.index import mentions
+            public_rows = ReadModel(self.root).snapshot() if self.sensitive else rows
+            items = mentions(self.root, public_rows, params.get("id"))
+            try:
+                index = int(params.get("index", "0"))
+                if index < 0:
+                    raise ValueError
+                item = items[index]
+                if item["token"] != params.get("field"):
+                    raise KeyError
+            except (ValueError, IndexError):
+                raise KeyError from None
+            return self.read_evidence(item["pointer"])
         if table not in ("nodes", "edges", "statements", "propositions"):
             raise KeyError
         identity = FIELDS[table].split()[0]
@@ -128,7 +144,12 @@ class ReadModel:
             pointer = record.get(field, [])[index]
         except (ValueError, IndexError):
             raise KeyError from None
-        result = {"pointer": pointer, "derived": {"session_display_name": session_name(None, {})}}
+        return self.read_evidence(pointer)
+
+    def read_evidence(self, pointer):
+        """Shared verified slice path, reached only through an authorized record."""
+        result = {"pointer": pointer, "ref": char_span_ref(pointer),
+                  "derived": {"session_display_name": session_name(None, {})}}
         if not (self.root / "corpus.sqlite").is_file():
             return result
         with closing(connect(self.root / "corpus.sqlite")) as db:
@@ -177,7 +198,13 @@ class ReadModel:
             identifier = node["node_id"]
             edges = [e for e in rows["edges"] if identifier in (e["src"], e["dst"])]
             neighborhood = {identifier} | {e[k] for e in edges for k in ("src", "dst")}
+            from .entities.index import mentions, merge_suggestions
+            public_rows = ReadModel(self.root).snapshot() if self.sensitive else rows
+            backlinks = [dict(m, ref=char_span_ref(m["pointer"])) for m in mentions(self.root, public_rows, identifier)]
             return {"node": node, "nodes": [nodes[i] for i in sorted(neighborhood)], "edges": edges,
+                    "mentions_index_available": (self.root / "entities.sqlite").is_file(),
+                    "mention_count": len(backlinks), "mentions": backlinks,
+                    "merge_suggestions": merge_suggestions(self.root, public_rows, identifier),
                     "aliases": [a for a in rows["aliases"] if a["node_id"] == identifier],
                     "statements": [s for s in rows["statements"] if identifier in s.get("about", [])],
                     "propositions": [p for p in rows["propositions"] if identifier in p["subject_node_ids"]],

@@ -199,3 +199,40 @@ test('derived facts render escaped, with common time formatting and contained ax
     assert.ok(r>=b,`warm palette: ${hex}`);
   }
 });
+
+
+test('round 4 accuracy and stability show derived values and small-sample gaps', () => {
+  const base = {outcome_counts:{supported:2,contradicted:1,unknown:1},accuracy_basis:'已知 3 / 共 4',accuracy:2/3,stability:0.5};
+  const html = views.lineView({node,line:{...line,derived:base}});
+  assert.match(html,/派生/); assert.match(html,/准确率 66.7%/); assert.match(html,/稳定性：50.0%/);
+  const small = views.lineView({node,line:{...line,derived:{...base,accuracy:null,accuracy_basis:'已知 2 / 共 4',stability:null}}});
+  assert.match(small,/已知 2 \/ 共 4/); assert.doesNotMatch(small,/准确率 [0-9]/);
+  assert.match(small,/至少需要 3 个点/);
+});
+
+test('pending items honor backend priority and escape template questions', () => {
+  const props = ['low','high'].map(id=>({prop_id:id,text:`fiction-${id}`,status:'proposed',subject_node_ids:[]}));
+  const html = views.homeView({lines:[],nodes:[],propositions:props,derived:{outcome_counts:{},pending_items:[
+    {prop_id:'high',priority:1,affected_line_count:3,question:'<fiction-question>'},
+    {prop_id:'low',priority:2,affected_line_count:0,question:'fiction-followup'}]}});
+  assert.ok(html.indexOf('fiction-high') < html.indexOf('fiction-low'));
+  assert.match(html,/派生/); assert.match(html,/优先级 1 · 影响 3 条/);
+  assert.match(html,/&lt;fiction-question&gt;/); assert.doesNotMatch(html,/<fiction-question>/);
+});
+
+test('entity mention backlinks are lazy drawer actions and suggestions never execute', () => {
+  const mentionRef = 'fiction-ref';
+  const data = {node,nodes:[node],edges:[],aliases:[],lines:[],statements:[],propositions:[],
+    mentions_index_available:true,mention_count:1,
+    mentions:[{doc_id:'<fiction-doc>',ts:null,token:mentionRef}],
+    merge_suggestions:[{a_node_id:node.node_id,b_node_id:'fiction-other',rule:'cooccurrence',score:.6}]};
+  const html = views.entityView(data);
+  assert.match(html,/原文提及反链 · 1/); assert.match(html,/&lt;fiction-doc&gt; · 时间未知/);
+  assert.match(html,/data-kind="mentions"/); assert.match(html,/data-field="fiction-ref"/);
+  assert.match(html,/建议合并（未执行）/); assert.doesNotMatch(html,/data-merge/);
+  assert.match(html,/摘要：<span class="gap">数据库暂无该字段/);
+  const empty = views.entityView({...data,mentions:[],mention_count:0,mentions_index_available:false});
+  assert.match(empty,/尚未建立提及索引/);
+  const ref = views.evidenceView({ref:{kind:'message_paragraphs',record_id:'<fiction>',paragraphs:[0,2]}});
+  assert.match(ref,/message_paragraphs/); assert.match(ref,/&lt;fiction&gt;/);
+});
