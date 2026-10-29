@@ -275,3 +275,43 @@ test('expanded mentions keep original indices and timeline changes retain their 
   assert.match(stream,/id="point-fiction-9"/);
   assert.match(stream,/fictional annotation/);
 });
+
+
+test('digest card validates presentation: folding, chronology, badges, escaping and fallback', async () => {
+  const {fictionalDigest} = await import('./ui_v2_fixture.mjs');
+  const digest = fictionalDigest();
+  const html = views.digestCard(digest);
+  assert.match(html,/由 2 条线合并/);
+  assert.match(html,/模型综述 · 已校验 6\/7 句/);
+  assert.match(html,/<details class="digest-ref-more"><summary[^>]*>\+1<\/summary>/);
+  assert.match(html,/data-doc-id="fiction-doc" data-quote="虚构花圃"/);
+  assert.match(html,/role="tooltip"/);
+  assert.match(html,/stance-plan/);
+  assert.match(html,/badge confirmed/);
+  assert.match(html,/<ol class="digest-timeline">/);
+  assert.ok(html.indexOf('最初从小花圃') < html.indexOf('后来暂停'));
+  assert.equal(digest.sentences[2].ts,'2025-06-14');
+  const malicious = structuredClone(digest);
+  malicious.sentences[0].text='<img src=x>';
+  malicious.sentences[0].evidence[0].quote='" onfocus="alert(1)';
+  assert.doesNotMatch(views.digestCard(malicious),/<img|data-quote="" onfocus=/);
+  assert.match(views.digestCard(null),/尚未生成综述/);
+  assert.match(views.lineView({line,node,digest}),/<details class="digest-evidence"><summary>依据 1 条/);
+  assert.doesNotMatch(views.lineView({line,node}),/class="digest-evidence"/);
+  const entity = {node,nodes:[node],edges:[],aliases:[],lines:[],statements:[],propositions:[]};
+  assert.match(views.entityView({...entity,digest:fictionalDigest('entity')}),/派生自 14 条表态/);
+  assert.doesNotMatch(views.entityView(entity),/class="digest-evidence"/);
+});
+
+test('home prefers digest sentences in all four questions and retains fallback', async () => {
+  const {fictionalDigest} = await import('./ui_v2_fixture.mjs');
+  const digest=fictionalDigest();
+  const data={lines:[],nodes:[],propositions:[],home_views:digest.sentences.filter(s=>s.section!=='what').map(sentence=>({sentence,source:digest.source}))};
+  const html=views.homeView(data);
+  assert.equal((html.match(/class="question-card"/g)||[]).length,4);
+  assert.equal((html.match(/class="digest-source"/g)||[]).length,6);
+  assert.match(html,/#\/line\/fiction-line/);
+  assert.match(html,/stance-plan/); assert.match(html,/badge confirmed/);
+  assert.doesNotMatch(html,/class="nums"/);
+  assert.match(views.homeView({...data,home_views:[]}),/暂无已记录的观点变化/);
+});

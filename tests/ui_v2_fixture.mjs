@@ -2,7 +2,23 @@
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
+export const fictionalDigest = (route = 'line') => ({
+  title:'虚构花圃用水综述', merged_title:route === 'line' ? '虚构花圃用水综述' : undefined,
+  member_line_ids:route === 'line' ? ['fiction-line','fiction-line-next'] : undefined,
+  statement_count:14, validation:{valid:6,total:7,dropped:1},
+  source:{route,id:route === 'line' ? 'fiction-line' : 'fiction-topic',title:'虚构花圃用水综述'},
+  sentences:[
+    {section:'what',text:'这是虚构花圃的小规模用水试验。',evidence:[{doc_id:'fiction-doc',quote:'虚构花圃'},{doc_id:'fiction-doc',quote:'雨水收集'},{doc_id:'fiction-doc',quote:'试种证据'}]},
+    {section:'view',text:'你计划通过分区试种观察用水效果。',stance:'计划',evidence:[{doc_id:'fiction-doc',quote:'试种证据'}]},
+    {section:'evolution',ts:'2025-06-14',text:'后来暂停扩大雨水收集。',evidence:[{doc_id:'fiction-doc',quote:'雨水收集'}]},
+    {section:'evolution',ts:'2025-06-02',text:'最初从小花圃开始记录。',evidence:[{doc_id:'fiction-doc',quote:'虚构花圃'}]},
+    {section:'record',text:'已有记录支持继续试种。',outcome:'confirmed',evidence:[{doc_id:'fiction-doc',quote:'试种证据'}]},
+    {section:'record',text:'扩大规模的结果仍未确定。',outcome:'unknown',evidence:[{doc_id:'fiction-doc',quote:'雨水收集'}]},
+  ],
+});
 export async function previewServer() {
+  let showDigests = true;
+  const requests = [];
   const node = {node_id:'fiction-topic',name:'虚构花圃的用水计划',type:'topic',evidence:[]};
   const nodes = [node, ...['雨水收集','试种记录','虚构园丁'].map((name,i) => ({node_id:`fiction-${i}`,name,type:'concept'}))];
   const pointer = {doc_id:'fiction-doc',span:[0,8],quote_hash:'fiction-hash'};
@@ -17,7 +33,11 @@ export async function previewServer() {
       res.setHeader('Cache-Control','no-store');
       if (url.pathname.startsWith('/api/')) {
         const route = url.pathname.slice(5);
+        requests.push({route,params:Object.fromEntries(url.searchParams)});
         const data = {home:{nodes,lines:[line],propositions:props,derived},toc:{nodes,lines:[line]},lines:{nodes,lines:[line]},line:{node,line},entities:{nodes},entity,search:{results:[{line},{node},{proposition:props[0]}]},evidence:{quote:'虚构花圃的雨水收集需要更多试种证据。',before:'本段仅用于离线界面验收。',after:'后续记录继续保留未知，不补写事实。',pointer,ts:null,author:'虚构园丁',derived:{session_display_name:'虚构试种会话'}}}[route];
+        if (showDigests && ['line','entity'].includes(route)) data.digest = fictionalDigest(route);
+        if (showDigests && route === 'home') data.home_views = fictionalDigest().sentences.filter(s=>s.section !== 'what').map(sentence=>({sentence,source:fictionalDigest().source}));
+        if (!showDigests && route === 'entity') delete data.digest;
         res.setHeader('Content-Type','application/json; charset=utf-8'); res.end(JSON.stringify(data));
       } else {
         const path = url.pathname === '/' ? '/app.html' : url.pathname;
@@ -28,7 +48,7 @@ export async function previewServer() {
     } catch {res.writeHead(500).end();}
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-  return {server,url:`http://127.0.0.1:${server.address().port}`};
+  return {server,url:`http://127.0.0.1:${server.address().port}`,requests,setDigests:value=>{showDigests=value;}};
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const {url} = await previewServer(); console.log(url);

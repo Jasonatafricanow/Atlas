@@ -63,6 +63,8 @@ def main(argv=None):
     server.add_argument("--data-dir", required=True)
     server.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost"))
     server.add_argument("--port", type=int, default=8765)
+    server.add_argument("--digest-dir", help="optional read-only digest output directory")
+    server.add_argument("--config", help="optional config with [paths].digest_dir")
     for name in ("ingest", "build", "all"):
         commands.add_parser(name).add_argument("--config", required=True)
     seed = commands.add_parser("seed").add_subparsers(dest="action", required=True)
@@ -120,7 +122,9 @@ def main(argv=None):
             return 0
         if a.cmd == "serve":
             from .server import serve
-            serve(a.data_dir, a.host, a.port)
+            digest_dir = a.digest_dir or (C.load_digest_dir(a.config) if a.config else None)
+            options = {"digest_dir": digest_dir} if digest_dir else {}
+            serve(a.data_dir, a.host, a.port, **options)
             return 0
         if a.cmd in ("tasks", "graph", "profile"):
             return task_command(a)

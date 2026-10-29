@@ -1,6 +1,9 @@
 """Backend-neutral API and evidence pointers; no source excerpts in refs."""
 import re
-from typing import Literal, Protocol, TypedDict, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, runtime_checkable
+
+if TYPE_CHECKING:
+    from .digests import DigestSource
 
 
 class CharSpanRef(TypedDict):
@@ -53,6 +56,7 @@ def char_span_ref(pointer) -> CharSpanRef:
 
 @runtime_checkable
 class Backend(Protocol):
+    def digests(self) -> "DigestSource | None": ...
     def toc(self, params: dict) -> dict: ...
     def home(self, params: dict) -> dict: ...
     def lines(self, params: dict) -> dict: ...

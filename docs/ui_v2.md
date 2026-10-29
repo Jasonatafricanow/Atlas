@@ -139,7 +139,7 @@ C:/Python314/python.exe -m atlas suggest-merges --data-dir $env:ATLAS_DATA_DIR
 `web/theme.css` 顶部的 `:root` 是唯一基础值表，紧随其后的
 `:root[data-theme="dark"]` 只覆写主题值。组件颜色、字体和字号只引用变量；
 最小字号 12px，中文正文行高 1.75，判断句 1.6，标题 1.3。字体全部为本地回退栈。
-以下共 **80 个不同 token**；暗色覆写不重复计数。
+以下共 **80 个不同 token**（Round 6 另加立场别名与日期列宽）；暗色覆写不重复计数。
 
 | Token 名 | 用途 |
 | --- | --- |
@@ -206,3 +206,64 @@ node --test tests/ui_v2_browser.test.mjs
 完整 leak_scan 被一个已有虚构语料文件的读取权限阻断，改动文件扫描为 0 命中。
 真实浏览器检查尚未完成：浏览器连接器不可用，headless Chrome 的 GPU 子进程启动失败；
 原生浏览器访问也未获工具批准。不能将这些结果表述为完整视觉验收或完整仓库扫描通过。
+
+
+## Round 6 · 综述卡
+
+`atlas serve` 可选 `--digest-dir`，只读已有实验任务输出，不生成任务、不建表、
+不修改 graph/corpus 或综述文件。省略时保留原 API 字段与页面，并显示“尚未生成综述”。
+以下命令只适用于已经存在的虚构演示目录：
+
+```powershell
+C:/Python314/python.exe -m atlas serve --data-dir ./_demo_out/fiction-data --digest-dir ./_demo_out/fiction-digests
+```
+
+也可指定 `--config examples/fiction-serve.toml`，其中 `[paths].digest_dir` 为可选字符串；
+相对路径相对于配置文件，显式 `--digest-dir` 优先。serve 仍要求显式 `--data-dir`，
+该配置读取不加载 `.env`、不读取环境中的真实数据目录，也不要求 `out_dir`。
+
+数据来自 `A_merged.json`、`B_line{k}.json` 与对应 `B_line{k}/input.json`，
+以及 `C_entity{k}.json` 与对应输入。`DigestSource.for_line/for_entity/home_views`
+由 `Backend.digests()` 提供；MR-Mem 返回 None，等待
+`for_mrmem_requirements.md` 第 9–10 节的原生字段。
+成员线 ID 指向同一综述，响应包含 `merged_title`、`member_line_ids`。
+原有主题 ID 路由继续有效；同主题有多个合并综述时 `digests` 返回全部卡片，
+`digest` 为第一张。实体严格按 name+type 唯一匹配；找不到、多义或重复输出不展示。
+
+缺失/损坏文件、错误外层结构降级为无综述。句子单独按实验 schema 与校验规则检查，
+无效句丢弃，并返回 `validation.valid/total/dropped`；日志只记录原因和数量。
+校验核对短引文是否存在于当前可见原文，以及数字和立场字段，**不是语义真实性认证**。
+输入引用必须对应当前可见的关联记录；敏感依赖遵循现有开关。
+被否定、取代、补充纠正、输入文本/时间变化或证据 hash 失配的旧综述不展示。
+文件格式没有完整来源版本，因此不能声称检测了所有语义上的过期情况。
+
+页面顶部展示标题、来源数量、模型综述标注和已校验句数，四段分别为：
+它是什么、你的核心看法、如何演变、对错记录。演变按已知时间升序排列为竖向时间线，
+未知时间置后并保持未知。五档立场使用 `--stance-{bull,bear,neutral,plan,observe}`
+及对应 `-bg` 别名 token；日期列用 `--digest-date-width`。结果徽章沿用现有 outcome。
+原有时间线/关系/提及等内容整体放入默认关闭的“依据 N 条”；无综述时不折叠。
+实体关系图在首次展开后初始化，后续保持原来的导航、缩放和居中功能。
+
+每句默认显示前两个引用标记，更多引用以 `+N` 展开；悬停或键盘聚焦显示短引文气泡。
+点击仍走 `/api/evidence`，使用 `kind=digest_line|digest_entity`、来源 ID、
+`doc_id`、`quote`。后端重新验证当前综述授权，再将引文定位到字符范围/hash，
+走原抽屉读取接口。列表仅含句子和 `{doc_id,quote}`，不含原文上下文；
+关闭抽屉即清空上下文，浏览器仍只持久化主题设置。
+
+首页四问优先展示演变、结果、核心看法和未决结果/计划的综述句，附来源链接与徽章；
+统计降为卡头小字。某卡没有对应综述句时回退原内容，已有待确认命题仍可展开。
+
+### Round 6 验证
+
+新增 Python 合成目录 fixture 覆盖读取、合并映射、唯一实体匹配、错误输入、句子丢弃、
+敏感依赖、纠正、配置优先级、只读 HTTP 响应及按需引文；JS 覆盖卡片结构、引用折叠、
+时间排序、转义与回退。浏览器用例增加综述、引用展开/聚焦/抽屉和无综述回退检查，
+沿用无控制台警告断言及桌面/移动主题检查。
+
+本轮环境实测：134 个 unittest 和 4 个独立 validator 测试通过；17 个 JS 测试通过，
+默认跳过 1 个需要显式启用的浏览器测试。全部 16 个改动文件 leak_scan 为 0 命中。指定 Python 没有 pytest，
+不能宣称 `python -m pytest tests -q` 通过。Node 24 须使用 `node --test tests/*.test.mjs`。
+真实浏览器检查在页面执行前被 CDP `Runtime.enable` 超时阻断（Chrome/Edge 均复现），
+浏览器工具的 access host 也不可用，因而尚无渲染验收或零控制台警告结论。
+完整 leak_scan 被已有 `examples/synthetic_corpus/life_notes.jsonl` 的读取权限阻断；
+扫描器及 git hooks 保持不变。本轮不提交、不推送。

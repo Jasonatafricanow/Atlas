@@ -44,8 +44,11 @@ async function openEvidence(button) {
   drawerBody.innerHTML = views.loading;
   drawer.showModal();
   try {
-    const data = await read('evidence', {kind: button.dataset.kind, id: button.dataset.id,
-      index: button.dataset.index, field: button.dataset.field, sensitive: sensitive()}, evidenceRequest.signal);
+    const params = {kind: button.dataset.kind, id: button.dataset.id, sensitive: sensitive()};
+    if (button.dataset.kind.startsWith('digest_')) {
+      params.doc_id = button.dataset.docId; params.quote = button.dataset.quote;
+    } else { params.index = button.dataset.index; params.field = button.dataset.field; }
+    const data = await read('evidence', params, evidenceRequest.signal);
     if (version === drawerVersion && drawer.open) drawerBody.innerHTML = views.evidenceView(data);
   } catch (error) {
     if (error.name !== 'AbortError' && version === drawerVersion && drawer.open) drawerBody.innerHTML = `<p role="alert">${views.esc(error.message)}</p>`;
@@ -99,8 +102,17 @@ async function route() {
     document.getElementById('toc').classList?.toggle('long', toc.lines.length > 12);
     if (page === 'line') destroyTimeline = mountTimeline(main);
     if (page === 'entity') {
-      try { destroyGraph = renderGraph(data); }
-      catch { document.getElementById('graph-status').textContent = '关系图暂不可用，请阅读下方完整关系列表。'; }
+      const folded = main.querySelector('.digest-evidence');
+      let dispose = () => {}, mounted = false;
+      const mount = () => {
+        if (mounted || (folded && !folded.open)) return;
+        mounted = true;
+        try { dispose = renderGraph(data); }
+        catch { document.getElementById('graph-status').textContent = '关系图暂不可用，请阅读下方完整关系列表。'; }
+      };
+      folded?.addEventListener('toggle', mount);
+      mount();
+      destroyGraph = () => { folded?.removeEventListener('toggle', mount); dispose(); };
     }
     main.focus({preventScroll:true});
     window.scrollTo({top:0});

@@ -34,3 +34,18 @@ def load(path):
     cfg["out_dir"] = resolve("out_dir", "ATLAS_OUT_DIR")
     cfg["config_dir"] = base
     return cfg
+
+
+def load_digest_dir(path):
+    """Read only the optional serve path; never consult data env vars or .env."""
+    from pathlib import Path
+    config = Path(path)
+    raw = config.read_text(encoding="utf-8")
+    cfg = tomllib.loads(raw) if config.suffix == ".toml" else json.loads(raw)
+    value = cfg.get("paths", {}).get("digest_dir")
+    if not value:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError("[paths].digest_dir must be a string")
+    directory = Path(value).expanduser()
+    return str(directory if directory.is_absolute() else (config.resolve().parent / directory))

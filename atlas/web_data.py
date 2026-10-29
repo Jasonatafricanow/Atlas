@@ -182,7 +182,8 @@ class ReadModel:
         if route == "lines":
             return {"lines": lines, "nodes": list(nodes.values())}
         if route == "line":
-            line = next((l for l in lines if l["topic_node_id"] == params.get("id")), None)
+            line = next((l for l in lines if l["topic_node_id"] == params.get("id") or
+                         any(batch["line_id"] == params.get("id") for batch in l["lines"])), None)
             if line is None:
                 raise KeyError
             return {"line": line, "node": nodes[line["topic_node_id"]]}

@@ -1,6 +1,7 @@
 """Loopback-only, read-only UI server. Runtime data is never served as a file."""
 import json
 import sqlite3
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -63,22 +64,22 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_POST
 
 
-def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend):
+def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend, digest_dir=None):
     if host not in ("127.0.0.1", "localhost"):
         raise ValueError("serve binds to loopback only")
     if not data_dir or not (Path(data_dir) / "graph.sqlite").is_file():
         raise ValueError("serve requires an existing graph.sqlite in an explicit data directory")
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.data_dir = Path(data_dir).resolve()
-    server.backend_factory = backend_factory
+    server.backend_factory = partial(backend_factory, digest_dir=digest_dir) if digest_dir else backend_factory
     server.assets = {"app.html", "theme.css"} | {
         p.relative_to(WEB).as_posix() for p in (WEB / "js").rglob("*.js")
         if p.resolve().is_relative_to(WEB)}
     return server
 
 
-def serve(data_dir, host="127.0.0.1", port=8765):
-    with create_server(data_dir, host, port) as server:
+def serve(data_dir, host="127.0.0.1", port=8765, *, digest_dir=None):
+    with create_server(data_dir, host, port, digest_dir=digest_dir) as server:
         print(f"ATLAS: http://127.0.0.1:{server.server_port}", flush=True)
         try:
             server.serve_forever()

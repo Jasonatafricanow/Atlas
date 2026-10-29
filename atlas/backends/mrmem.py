@@ -2,6 +2,10 @@
 
 
 class MrMemBackend:
+    def digests(self):
+        """Unavailable until docs/for_mrmem_requirements.md sections 9–10 land."""
+        return None
+
     def toc(self, params):
         """Read visible Line identities and entity names for navigation."""
         raise NotImplementedError

@@ -21,6 +21,12 @@
   --sidebar-width:248px; --search-width:360px; --drawer-width:520px; --stream-width:760px; --rail-width:220px;
   --graph-height:320px; --graph-small-height:220px; --axis-step:140px; --axis-dot:10px;
   --graph-center:44px; --graph-min:20px; --graph-max:32px; --graph-label-gap:6px; --graph-arrow:6px;
+  --stance-bull:var(--confirmed); --stance-bull-bg:var(--confirmed-bg);
+  --stance-bear:var(--refuted); --stance-bear-bg:var(--refuted-bg);
+  --stance-neutral:var(--ink-2); --stance-neutral-bg:var(--surface-2);
+  --stance-plan:var(--accent); --stance-plan-bg:var(--accent-weak);
+  --stance-observe:var(--unknown); --stance-observe-bg:var(--unknown-bg);
+  --digest-date-width:112px;
   --graph-label-opacity:.9; --graph-edge-opacity:.3; --graph-dim-opacity:.15;
 }
 :root[data-theme="dark"] {
@@ -108,3 +114,25 @@ details{margin-top:var(--sp-4)}summary{cursor:pointer;color:var(--ink-2);font-si
 .entity-list>.list-more[open]{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--sp-4)}
 .entity-list>.list-more>summary{grid-column:1/-1}
 .line-list .list-more .line-card{margin-top:var(--sp-4)}
+
+/* Round 6: digest cards share the light/dark design tokens. */
+.digest-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--sp-6);margin-bottom:var(--sp-5);box-shadow:var(--shadow-1)}
+.digest-meta,.digest-fallback{color:var(--ink-3);font-size:var(--fs-xs);line-height:var(--lh-meta);margin:var(--sp-2) 0 var(--sp-4)}
+.digest-section{margin-top:var(--sp-6)}.digest-section h3{font:600 var(--fs-sm)/var(--lh-heading) var(--font-sans);color:var(--ink-2);margin-bottom:var(--sp-2)}
+.digest-sentence,.digest-timeline-text,.digest-home-text{font:var(--fs-md)/var(--lh-quote) var(--font-serif);overflow-wrap:anywhere;margin:var(--sp-2) 0}
+.digest-card .badge,.digest-home-row .badge{display:inline-block;font-family:var(--font-sans);margin-right:var(--sp-2)}
+.stance-bull{color:var(--stance-bull);background:var(--stance-bull-bg)}.stance-bear{color:var(--stance-bear);background:var(--stance-bear-bg)}
+.stance-neutral{color:var(--stance-neutral);background:var(--stance-neutral-bg)}.stance-plan{color:var(--stance-plan);background:var(--stance-plan-bg)}.stance-observe{color:var(--stance-observe);background:var(--stance-observe-bg)}
+.digest-timeline{list-style:none;padding:0 0 0 var(--sp-4);margin:var(--sp-3) 0;border-left:1px solid var(--line-strong)}
+.digest-timeline li{position:relative;display:flex;flex-wrap:wrap;gap:0 var(--sp-4);padding:var(--sp-2) 0}
+.digest-timeline li:before{content:"";position:absolute;left:calc(-1 * var(--sp-5));top:var(--sp-4);width:var(--sp-2);height:var(--sp-2);border-radius:var(--r-pill);background:var(--accent)}
+.digest-timeline time{flex:0 0 var(--digest-date-width);color:var(--ink-3);font:var(--fs-xs)/var(--lh-quote) var(--font-sans);font-variant-numeric:tabular-nums;padding-top:var(--sp-2)}
+.digest-timeline-text{flex:1 1 var(--sidebar-width);min-width:0}
+.digest-refs{display:inline;font-family:var(--font-sans);font-size:var(--fs-xs);margin-left:var(--sp-1)}
+.digest-ref{position:relative;display:inline-block}.digest-ref button{border:0;background:var(--clear);color:var(--accent);font-size:var(--fs-xs);padding:0 var(--sp-1)}
+.quote-tooltip{display:none;position:absolute;bottom:100%;right:0;z-index:5;width:max-content;max-width:min(var(--sidebar-width),50vw);padding:var(--sp-3);border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink);font:var(--fs-sm)/var(--lh-body) var(--font-sans);box-shadow:var(--shadow-2);white-space:normal;overflow-wrap:anywhere}
+.digest-ref:hover .quote-tooltip,.digest-ref:focus-within .quote-tooltip{display:block}
+.digest-ref-more{display:inline-block;vertical-align:baseline}.digest-ref-more summary{display:inline-block;color:var(--accent);font-size:var(--fs-xs);padding:0 var(--sp-1);cursor:pointer}.digest-ref-more summary::marker{content:""}
+.digest-evidence{margin-top:var(--sp-5)}.digest-evidence>summary{font-size:var(--fs-sm);color:var(--ink-2);padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);cursor:pointer}.digest-evidence[open]>summary{margin-bottom:var(--sp-5)}
+.digest-source{display:block;color:var(--accent);font-size:var(--fs-xs);margin-top:var(--sp-2)}.digest-home-text{font-size:var(--fs-base)}
+.digest-ref-more:not([open])>.digest-ref{display:none}
