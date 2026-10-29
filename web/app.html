@@ -16,8 +16,7 @@
   <aside class="sidebar">
     <a class="brand" href="#/home">ATLAS<span>个人认知图谱</span></a>
     <label class="search-label" for="search">搜索人物、主题与判断</label>
-    <div class="search-box"><input id="search" type="search" autocomplete="off" placeholder="搜索…"><kbd>Ctrl K /</kbd></div>
-    <div id="search-results" aria-live="polite"></div>
+    <div class="search-box"><input id="search" type="search" autocomplete="off" placeholder="搜索…" role="combobox" aria-autocomplete="list" aria-controls="search-results" aria-expanded="false"><kbd>Ctrl K /</kbd><div id="search-results" role="listbox" aria-label="搜索结果" aria-live="polite"></div></div>
     <nav class="primary" aria-label="视图"><a href="#/home">概览 <span>01</span></a><a href="#/lines">判断线 <span>02</span></a><a href="#/entities">实体 <span>03</span></a></nav>
     <p class="section-label">判断线目录</p><nav id="toc" class="toc" aria-label="判断线目录"></nav>
     <p class="sidebar-note">沿着时间理解判断，<br>回到证据核对来源。</p>
@@ -27,7 +26,7 @@
     <main id="content" tabindex="-1" aria-live="polite"></main>
     <footer>本地只读 · 判断来自记录，核对回到原文</footer>
   </div>
-  <dialog id="evidence" aria-label="证据原文"><div class="drawer-head"><div><span class="eyebrow">回到来源</span><h2>证据</h2></div><button id="close-evidence" aria-label="关闭证据">关闭 ×</button></div><div id="evidence-body"></div></dialog>
+  <dialog id="evidence" aria-label="证据原文"><div class="drawer-head"><div><span class="eyebrow">回到来源</span><h2>证据</h2></div><div class="drawer-close"><kbd>Esc</kbd><button id="close-evidence" aria-label="关闭证据">×</button></div></div><div id="evidence-body"></div></dialog>
   <noscript>请启用 JavaScript 以读取本地数据库。</noscript>
 </body>
 </html>

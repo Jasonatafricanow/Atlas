@@ -78,8 +78,8 @@ python tools/leak_scan.py
 时间统一为 `2024-11-08 16:27`，当前年省略年份，未知显示“时间未知”；
 日期精度的来源只显示日期。保留来源墙钟，不隐式换时区。
 横轴可内部滚动，位置提示随滚动 / 尺寸变化更新，点击点定位纵向正文。
-小图最大缩放为 1×，节点尺寸固定，居中与窗口变化保持留白。
-深色主题使用暖黑、米色与琥珀色，保留关系图与转变点光晕。
+小图最大缩放为 1×，Round 5 起邻居按度数缩放，居中与窗口变化保持留白。
+深色主题使用暖黑、米色与琥珀色；Round 5 已去除关系图与转变点光晕。
 
 证据抽屉的会话名按安全 channel、明确显示元数据、“未命名会话”回退，
 不展示文件路径。完整口径及独立未来模块设计见
@@ -132,3 +132,77 @@ C:/Python314/python.exe -m atlas suggest-merges --data-dir $env:ATLAS_DATA_DIR
 `kind=mentions,id=node_id,index=列表位置,field=该行token`；服务重新验证当前
 节点/别名/文档可见性及 token，再走同一个 offset/hash 校验切片路径。
 没有任意 doc_id/span 读取入口。开启敏感显示也不会扩展实体索引的来源范围。
+
+
+## Round 5 · 设计系统 token
+
+`web/theme.css` 顶部的 `:root` 是唯一基础值表，紧随其后的
+`:root[data-theme="dark"]` 只覆写主题值。组件颜色、字体和字号只引用变量；
+最小字号 12px，中文正文行高 1.75，判断句 1.6，标题 1.3。字体全部为本地回退栈。
+以下共 **80 个不同 token**；暗色覆写不重复计数。
+
+| Token 名 | 用途 |
+| --- | --- |
+| `--bg`, `--bg-sunken`, `--surface`, `--surface-2` | 页面、下沉区、卡片与次级表面 |
+| `--ink`, `--ink-2`, `--ink-3`, `--ink-4` | 正文、说明、元信息、装饰/禁用层次 |
+| `--line`, `--line-strong` | 默认/悬停边线 |
+| `--accent`, `--accent-hover`, `--accent-weak`, `--accent-ink`, `--focus` | 强调、悬停、弱底、强调面文字与焦点环 |
+| `--confirmed`, `--confirmed-bg`, `--refuted`, `--refuted-bg`, `--change`, `--change-bg`, `--unknown`, `--unknown-bg` | 支持、反驳、转变与未知的前景/背景 |
+| `--font-serif`, `--font-sans`, `--font-mono` | 标题/判断句/引文，UI/说明，证据指针/ID |
+| `--fs-xs`, `--fs-sm`, `--fs-base`, `--fs-md`, `--fs-lg`, `--fs-xl`, `--fs-2xl`, `--fs-stat`, `--fs-detail` | 12/13/15/17/20/24/34px 字阶；统计数字 30px，档案值 14px |
+| `--lh-body`, `--lh-claim`, `--lh-heading`, `--lh-meta`, `--lh-quote`, `--lh-context` | 正文、判断句、标题、元信息、引文和上下文行高 |
+| `--sp-1`, `--sp-2`, `--sp-3`, `--sp-4`, `--sp-5`, `--sp-6`, `--sp-8`, `--sp-10`, `--sp-12` | 4px 基准间距：4/8/12/16/20/24/32/40/48px |
+| `--r-sm`, `--r-md`, `--r-lg`, `--r-pill`, `--r-seal` | 按钮 6px、卡片 10px、面板 14px、胶囊与印章圆角 |
+| `--shadow-1`, `--shadow-2`, `--shadow-page`, `--veil`, `--clear` | 卡片、浮层、纸面阅读区阴影，抽屉遮罩与透明值；暗色改用细线 |
+| `--dur-1`, `--dur-2`, `--dur-graph` | 悬停 120ms、抽屉 180ms、图谱邻域 150ms |
+| `--sidebar-width`, `--search-width`, `--drawer-width`, `--stream-width`, `--rail-width` | 248px 侧栏、360px 搜索、520px 抽屉、760px 流、220px 统计栏 |
+| `--graph-height`, `--graph-small-height`, `--axis-step`, `--axis-dot` | 320px 图谱（仅一个邻居时 220px），140px 轴间距与 10px 时间点 |
+| `--graph-center`, `--graph-min`, `--graph-max`, `--graph-label-gap`, `--graph-arrow` | 44px 中心直径、20–32px 邻居直径、6px 标签间距与箭头宽 |
+| `--graph-label-opacity`, `--graph-edge-opacity`, `--graph-dim-opacity` | 标签底 .9、边 .3、非邻域 .15 透明度 |
+
+判断线普通记录为紧凑行，标注说明折叠；已有转变保留卡片和左侧强调线。
+宽度 ≥1280px 时显示 sticky 统计/转变跳转栏。超过 8 条的阅读列表先显示 5 条，
+其余通过“展开 N 条”访问；横轴跳转会先打开目标所在折叠区，再定位和聚焦。
+首页四问卡初始最多展示 4 条，保留底部入口、等高布局和两行截断说明。
+统计使用当前可见记录的已有派生口径，不增加立场、摘要或事实。
+
+侧栏搜索浮层按判断线、实体、记录分组，转义后高亮字面关键词。
+↑/↓ 选择、Enter 打开、Esc 收起；保留 Tab 链接导航及 Ctrl+K/⌘K/斜杠快捷键。
+证据抽屉头部固定、引文与上下文分层、关闭即清除内容；系统减少动态效果时禁用动画。
+
+实体“提及”读取已有 `entities.sqlite/mentions_index`，在 `ReadModel.get('entity')`
+中仅增加 `display_name` 和 `associated_node_count` 两个只读字段。
+显示名复用证据抽屉的安全会话名规则；计数为同文档中当前可见、别名仍有效的不同节点，
+不是匹配次数。时间仍来自文档，未知不替换成索引时间。列表折叠不改变原始索引及 token，
+点击仍走原有证据校验路径。不创建索引、不读取正文作为列表摘要、不修改数据库。
+未建索引显示“尚未建立提及索引，运行 atlas index-mentions”。
+
+### Round 5 离线验收
+
+```powershell
+C:/Python314/python.exe -m pytest tests -q
+# pytest 未安装时，仓库全部 Python 用例也可由标准库运行：
+C:/Python314/python.exe -m unittest discover -s tests -q
+# Node 24 使用显式文件匹配，不把 tests/ 当作模块入口：
+node --test tests/*.test.mjs
+C:/Python314/python.exe tools/leak_scan.py
+```
+
+`tests/ui_v2_fixture.mjs` 是纯内存、完全虚构的本地预览服务器，
+不接入数据库，不写数据目录，不运行生成任务。可用 `node tests/ui_v2_fixture.mjs`
+启动，终端打印随机回环端口。另有可选的已安装 Chrome 渲染验收：
+
+```powershell
+$env:ATLAS_TEST_BROWSER = '1'
+node --test tests/ui_v2_browser.test.mjs
+```
+
+浏览器验收使用独立临时浏览器配置，检查桌面/移动布局、深浅主题、键盘搜索、
+证据抽屉、图谱及隐藏记录跳转。只有显式设置 `ATLAS_TEST_BROWSER=1` 才运行；
+默认 JS 验收会明确报告这一项跳过。`ATLAS_TEST_CHROME` 可指定已安装浏览器路径，
+`ATLAS_UI_SCREENSHOTS` 可指定临时截图目录。应用本身没有新增依赖。
+
+本轮环境记录：122 个 Python unittest 通过，15 个 JS 测试通过；pytest 未安装。
+完整 leak_scan 被一个已有虚构语料文件的读取权限阻断，改动文件扫描为 0 命中。
+真实浏览器检查尚未完成：浏览器连接器不可用，headless Chrome 的 GPU 子进程启动失败；
+原生浏览器访问也未获工具批准。不能将这些结果表述为完整视觉验收或完整仓库扫描通过。

@@ -201,6 +201,22 @@ class ReadModel:
             from .entities.index import mentions, merge_suggestions
             public_rows = ReadModel(self.root).snapshot() if self.sensitive else rows
             backlinks = [dict(m, ref=char_span_ref(m["pointer"])) for m in mentions(self.root, public_rows, identifier)]
+            # Metadata only: names use the same safe display policy as the drawer.
+            # Count distinct, currently visible nodes with still-valid aliases,
+            # not raw matches (one node can occur several times in a document).
+            if backlinks:
+                from .entities.index import names_by_node, usable_alias
+                names = names_by_node(public_rows)
+                with closing(connect(self.root / "corpus.sqlite")) as corpus, closing(connect(self.root / "entities.sqlite")) as index:
+                    metadata = {}
+                    for doc_id in {m["doc_id"] for m in backlinks}:
+                        channel, meta = corpus.execute("SELECT channel,meta FROM documents WHERE id=?", (doc_id,)).fetchone()
+                        linked = {nid for nid, alias in index.execute(
+                            "SELECT DISTINCT node_id,matched_alias FROM mentions_index WHERE doc_id=?", (doc_id,))
+                            if alias in names.get(nid, set()) and usable_alias(alias)}
+                        metadata[doc_id] = {"display_name": session_name(channel, json.loads(meta or "{}")),
+                                            "associated_node_count": len(linked)}
+                    backlinks = [dict(m, **metadata[m["doc_id"]]) for m in backlinks]
             return {"node": node, "nodes": [nodes[i] for i in sorted(neighborhood)], "edges": edges,
                     "mentions_index_available": (self.root / "entities.sqlite").is_file(),
                     "mention_count": len(backlinks), "mentions": backlinks,

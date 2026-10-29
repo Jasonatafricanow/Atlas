@@ -54,6 +54,8 @@ test('drawer cancellation and navigation discard late evidence; only theme persi
     focus() { document.activeElement = this; }
     select() {}
     setAttribute() {}
+    removeAttribute() {}
+    querySelectorAll() { return []; }
     showModal() { this.open = true; }
     close() { this.open = false; queueMicrotask(()=>this.emit('close')); }
   }
@@ -62,7 +64,7 @@ test('drawer cancellation and navigation discard late evidence; only theme persi
   doc.getElementById = id => ids[id];
   doc.querySelectorAll = () => [];
   doc.documentElement = new Element();
-  const win = new Element(); win.scrollTo = () => {};
+  const win = new Element(); win.scrollTo = () => {}; win.matchMedia = () => ({matches:false});
   globalThis.document = doc; globalThis.window = win; globalThis.location = {hash:'#/home'};
   const storage = new Map();
   globalThis.localStorage = {getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)};
@@ -167,13 +169,13 @@ test('entity graph caps single and two-node views and recenters on resize', asyn
     for (const size of [1,2]) {
       let options, fit=0, center=0, resize, disposed=false;
       globalThis.document={getElementById:()=>({}),documentElement:{},querySelector:()=>null};
-      globalThis.getComputedStyle=()=>({getPropertyValue:()=> '#e6a35e'});
+      globalThis.getComputedStyle=()=>({getPropertyValue:key=>({'--graph-center':'44px','--graph-min':'20px','--graph-max':'32px','--fs-xs':'12px','--dur-graph':'150ms'}[key] || '1')});
       globalThis.cytoscape=opts=>{options=opts;return {on(){},fit(_elements,padding){assert.equal(padding,45);fit++;},center(){center++;},resize(){},destroy(){disposed=true;}};};
       globalThis.ResizeObserver=class {constructor(fn){resize=fn;} observe(){} disconnect(){}};
       const destroy=renderGraph({node,nodes:Array.from({length:size},(_,i)=>({...node,node_id:`fiction-${i}`})),edges:[]});
       assert.equal(options.maxZoom,1);
-      assert.equal(options.style.find(s=>s.selector==='node').style.width,28);
-      assert.equal(options.style.find(s=>s.selector==='node.focus').style.width,42);
+      assert.equal(options.style.find(s=>s.selector==='node').style.width,'data(size)');
+      assert.equal(options.style.find(s=>s.selector==='node.focus').style.width,44);
       assert.equal(fit,1); assert.equal(center,1);
       resize(); assert.equal(fit,2); assert.equal(center,2);
       destroy(); assert.ok(disposed);
@@ -224,15 +226,52 @@ test('entity mention backlinks are lazy drawer actions and suggestions never exe
   const mentionRef = 'fiction-ref';
   const data = {node,nodes:[node],edges:[],aliases:[],lines:[],statements:[],propositions:[],
     mentions_index_available:true,mention_count:1,
-    mentions:[{doc_id:'<fiction-doc>',ts:null,token:mentionRef}],
+    mentions:[{doc_id:'fiction-doc',display_name:'<fiction-session>',associated_node_count:3,ts:null,token:mentionRef}],
     merge_suggestions:[{a_node_id:node.node_id,b_node_id:'fiction-other',rule:'cooccurrence',score:.6}]};
   const html = views.entityView(data);
-  assert.match(html,/原文提及反链 · 1/); assert.match(html,/&lt;fiction-doc&gt; · 时间未知/);
+  assert.match(html,/提及 <span class="meta">来自提及索引 · 1/); assert.match(html,/&lt;fiction-session&gt;/); assert.match(html,/时间未知 · 关联节点 3/);
   assert.match(html,/data-kind="mentions"/); assert.match(html,/data-field="fiction-ref"/);
   assert.match(html,/建议合并（未执行）/); assert.doesNotMatch(html,/data-merge/);
-  assert.match(html,/摘要：<span class="gap">数据库暂无该字段/);
+  assert.match(html,/<dt>摘要<\/dt><dd><span class="gap">数据库暂无该字段/);
   const empty = views.entityView({...data,mentions:[],mention_count:0,mentions_index_available:false});
   assert.match(empty,/尚未建立提及索引/);
   const ref = views.evidenceView({ref:{kind:'message_paragraphs',record_id:'<fiction>',paragraphs:[0,2]}});
   assert.match(ref,/message_paragraphs/); assert.match(ref,/&lt;fiction&gt;/);
+});
+
+// Round 5 design contract: colors and type live only in the two root token blocks.
+test('design tokens are complete and component colors and font sizes are variable-only', () => {
+  const css=readFileSync(new URL('../web/theme.css',import.meta.url),'utf8');
+  const blocks=[...css.matchAll(/:root(?:\[data-theme="dark"\])?\s*\{([^}]+)\}/g)];
+  assert.equal(blocks.length,2);
+  const tokens=new Set([...blocks[0][1].matchAll(/(--[\w-]+)\s*:/g)].map(m=>m[1]));
+  for(const name of ['bg','bg-sunken','surface','surface-2','ink','ink-2','ink-3','ink-4','line','line-strong','accent','accent-hover','accent-weak','accent-ink','focus','confirmed','confirmed-bg','refuted','refuted-bg','change','change-bg','unknown','unknown-bg','font-serif','font-sans','font-mono','fs-xs','fs-sm','fs-base','fs-md','fs-lg','fs-xl','fs-2xl','sp-1','sp-2','sp-3','sp-4','sp-5','sp-6','sp-8','sp-10','sp-12','r-sm','r-md','r-lg','r-pill','shadow-1','shadow-2','dur-1','dur-2']) assert.ok(tokens.has(`--${name}`),name);
+  const components=css.replace(/:root(?:\[data-theme="dark"\])?\s*\{[^}]+\}/g,'');
+  assert.doesNotMatch(components, /#[\da-f]{3,8}\b|\brgba?\(|\bhsla?\(/i);
+  assert.doesNotMatch(components, /font(?:-size)?\s*:[^;}]*\d+(?:px|rem|em)/);
+  for(const match of blocks[0][1].matchAll(/--fs-[\w-]+\s*:\s*(\d+)px/g)) assert.ok(Number(match[1])>=12);
+  for(const match of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(tokens.has(match[1]),`undefined token ${match[1]}`);
+  assert.doesNotMatch(css,/radial-gradient|0 0 13px/);
+});
+
+test('search groups and literal highlights escape hostile text and regex syntax', () => {
+  assert.equal(views.highlight('<fiction> [a].*','[a].*'),'&lt;fiction&gt; <mark>[a].*</mark>');
+  assert.equal(views.highlight('Fiction fiction','fiction'),'<mark>Fiction</mark> <mark>fiction</mark>');
+  const html=views.searchView({results:[{node},{line:{name:'虚构主题',topic_node_id:node.node_id}},{proposition:{text:'虚构判断',subject_node_ids:[]}}]},'虚构');
+  assert.equal((html.match(/class="search-group"/g)||[]).length,3);
+  assert.equal((html.match(/<mark>虚构<\/mark>/g)||[]).length,3);
+});
+
+test('expanded mentions keep original indices and timeline changes retain their annotations', () => {
+  const mentions=Array.from({length:10},(_,i)=>({doc_id:`fiction-${i}`,token:`fiction-ref-${i}`,associated_node_count:1}));
+  const html=views.entityView({node,nodes:[node],edges:[],aliases:[],lines:[],statements:[],propositions:[],mentions,mention_count:10,mentions_index_available:true});
+  assert.match(html,/展开 5 条/);
+  assert.match(html,/data-index="9" data-field="fiction-ref-9"/);
+  const timeline=Array.from({length:10},(_,i)=>({...point,statement_id:`fiction-${i}`,annotations:[{shift:i===1?'reverse':'same',outcome:'unknown',reason:'fictional annotation'}]}));
+  const stream=views.lineView({node,line:{...line,timeline}});
+  assert.match(stream,/class="event change" id="point-fiction-1"/);
+  assert.match(stream,/class="annotation-details"/);
+  assert.match(stream,/class="stream-more"><details><summary>展开 5 条/);
+  assert.match(stream,/id="point-fiction-9"/);
+  assert.match(stream,/fictional annotation/);
 });

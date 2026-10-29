@@ -12,6 +12,7 @@ let pageRequest, evidenceRequest, searchRequest, searchTimer;
 let destroyGraph = () => {};
 let destroyTimeline = () => {};
 let pageVersion = 0, drawerVersion = 0, searchVersion = 0;
+let searchSelection = -1;
 const sensitive = () => document.getElementById('sensitive').checked ? '1' : '0';
 const errorView = error => `<div class="empty" role="alert">${views.esc(error.message)} <button data-retry>重试</button></div>`;
 
@@ -57,6 +58,9 @@ function clearSearch() {
   searchRequest?.abort();
   results.replaceChildren();
   search.value = '';
+  searchSelection = -1;
+  search.removeAttribute('aria-activedescendant');
+  search.setAttribute('aria-expanded', 'false');
 }
 
 async function route() {
@@ -92,6 +96,7 @@ async function route() {
     if (version !== pageVersion) return;
     main.innerHTML = render(data);
     document.getElementById('toc').innerHTML = views.tocView(toc);
+    document.getElementById('toc').classList?.toggle('long', toc.lines.length > 12);
     if (page === 'line') destroyTimeline = mountTimeline(main);
     if (page === 'entity') {
       try { destroyGraph = renderGraph(data); }
@@ -109,20 +114,46 @@ search.addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchRequest?.abort();
   results.replaceChildren();
+  searchSelection = -1;
+  search.removeAttribute('aria-activedescendant');
   const query = search.value.trim();
+  search.setAttribute('aria-expanded', query ? 'true' : 'false');
   if (!query) return;
   results.innerHTML = views.loading;
   searchTimer = setTimeout(async () => {
     searchRequest = new AbortController();
     try {
       const data = await read('search', {q: query, sensitive: sensitive()}, searchRequest.signal);
-      if (version === searchVersion) results.innerHTML = views.searchView(data);
+      if (version === searchVersion) results.innerHTML = views.searchView(data, query);
     } catch (error) {
       if (error.name !== 'AbortError' && version === searchVersion) results.innerHTML = `<p role="alert">${views.esc(error.message)}</p>`;
     }
   }, 200);
 });
-search.addEventListener('keydown', event => { if (event.key === 'Escape') clearSearch(); });
+search.addEventListener('focus', () => {
+  if (!search.value.trim()) {
+    results.innerHTML = '<p class="caption">输入关键词，搜索判断线、实体与记录。</p>';
+    search.setAttribute('aria-expanded', 'true');
+  }
+});
+search.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { clearSearch(); return; }
+  if (!['ArrowDown','ArrowUp','Enter'].includes(event.key)) return;
+  const links = [...results.querySelectorAll('a')];
+  if (!links.length) return;
+  if (event.key === 'Enter') {
+    if (searchSelection >= 0) { event.preventDefault(); links[searchSelection].click(); }
+    return;
+  }
+  event.preventDefault();
+  searchSelection = event.key === 'ArrowDown' ? (searchSelection + 1) % links.length : (searchSelection <= 0 ? links.length - 1 : searchSelection - 1);
+  links.forEach((a,i) => {a.classList.toggle('selected', i === searchSelection); a.setAttribute('aria-selected', String(i === searchSelection));});
+  search.setAttribute('aria-activedescendant', links[searchSelection].id);
+  links[searchSelection].scrollIntoView({block:'nearest'});
+});
+document.addEventListener('focusin', event => {
+  if (!event.target.closest('.search-box')) clearSearch();
+});
 document.addEventListener('keydown', event => {
   const editing = ['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName) || event.target.isContentEditable;
   if (!drawer.open && (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !editing))) {
@@ -130,12 +161,20 @@ document.addEventListener('keydown', event => {
   }
 });
 document.addEventListener('click', event => {
+  if (!event.target.closest('.search-box')) clearSearch();
   if (event.target.closest('.skip')) { event.preventDefault(); main.focus(); return; }
   const button = event.target.closest('button');
   if (button?.hasAttribute('data-evidence')) openEvidence(button);
   if (button?.hasAttribute('data-point')) {
     const point = document.getElementById('point-' + button.dataset.point);
-    point?.scrollIntoView({behavior:'smooth', block:'center'}); point?.focus({preventScroll:true});
+    if (point) {
+      // A target may be inside a collapsed list; open it before navigating.
+      for (let parent = point.parentElement; parent; parent = parent.parentElement) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+      }
+    }
+    main.querySelectorAll('.axis-point').forEach(item => item.setAttribute('aria-current', String(item.dataset.point === button.dataset.point)));
+    point?.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'center'}); point?.focus({preventScroll:true});
   }
   if (button?.hasAttribute('data-retry')) route();
 });

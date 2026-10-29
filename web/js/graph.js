@@ -4,22 +4,30 @@ export function renderGraph(data) {
   if (!container || !globalThis.cytoscape) return () => {};
   const colors = getComputedStyle(document.documentElement);
   const color = name => colors.getPropertyValue(name).trim();
+  const number = name => parseFloat(color(name));
+  const degrees = new Map(data.nodes.map(n => [n.node_id, 0]));
+  for (const edge of data.edges) {
+    for (const id of [edge.src, edge.dst]) degrees.set(id, (degrees.get(id) || 0) + 1);
+  }
+  const maxDegree = Math.max(1, ...degrees.values());
   const cy = globalThis.cytoscape({
     container,
     elements: [
-      ...data.nodes.map(n => ({data: {id: n.node_id, label: n.name}, classes: n.node_id === data.node.node_id ? 'focus' : ''})),
+      ...data.nodes.map(n => ({data: {id: n.node_id, label: n.name,
+        size:number('--graph-min') + (number('--graph-max') - number('--graph-min')) * Math.max(0,(degrees.get(n.node_id) - 1)) / Math.max(1,maxDegree - 1)}, classes: n.node_id === data.node.node_id ? 'focus' : ''})),
       ...data.edges.map(e => ({data: {id: `edge:${e.edge_id}`, source: e.src, target: e.dst, label: e.type}, classes: ['superseded','rejected'].includes(e.status) ? 'historical' : ''})),
     ],
     style: [
-      {selector: 'node', style: {'background-color': color('--surface'), 'border-color': color('--accent'), 'border-width': 2, 'color': color('--ink'), 'label': 'data(label)', 'font-size': 13, 'text-valign': 'bottom', 'text-margin-y': 10, 'text-wrap': 'wrap', 'text-max-width': 120, 'width': 28, 'height': 28}},
-      {selector: 'node.focus', style: {'background-color': color('--accent'), 'width': 42, 'height': 42, 'underlay-color': color('--accent'), 'underlay-opacity': 0.16, 'underlay-padding': 12}},
-      {selector: 'edge', style: {'width': 1.5, 'line-color': color('--muted'), 'target-arrow-color': color('--muted'), 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(label)', 'font-size': 10, 'color': color('--muted'), 'text-background-color': color('--surface'), 'text-background-opacity': 1, 'text-background-padding': 3, 'text-rotation': 'autorotate'}},
-      {selector: '.historical', style: {'line-style': 'dashed', 'opacity': 0.55}},
-      {selector: '.dim', style: {'opacity': 0.18}},
-      {selector: ':selected', style: {'border-width': 4, 'border-color': color('--accent')}},
+      {selector: 'node, edge', style: {'label':'data(label)', 'font-family':color('--font-sans'), 'font-size':number('--fs-xs'), 'color':color('--ink-2'), 'text-background-color':color('--surface'), 'text-background-opacity':number('--graph-label-opacity'), 'text-background-padding':3, 'transition-property':'opacity', 'transition-duration':window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : number('--dur-graph')}},
+      {selector: 'node', style: {'background-color': color('--surface'), 'border-color': color('--ink-3'), 'border-width': 1.5, 'text-valign': 'bottom', 'text-margin-y': number('--graph-label-gap'), 'text-wrap': 'wrap', 'text-max-width': 120, 'width':'data(size)', 'height':'data(size)'}},
+      {selector: 'node.focus', style: {'background-color': color('--accent'), 'border-color':color('--accent'), 'width': number('--graph-center'), 'height': number('--graph-center')}},
+      {selector: 'edge', style: {'width': 1, 'line-color': color('--line-strong'), 'line-opacity':number('--graph-edge-opacity'), 'target-arrow-color': color('--line-strong'), 'target-arrow-shape': 'triangle', 'target-arrow-width':number('--graph-arrow'), 'curve-style': 'bezier', 'text-rotation': 'autorotate'}},
+      {selector: '.historical', style: {'line-style': 'dashed', 'line-dash-pattern':[4,4]}},
+      {selector: '.dim', style: {'opacity': number('--graph-dim-opacity')}},
+      {selector: ':selected', style: {'border-color': color('--accent')}},
     ],
     layout: {name: 'fcose', quality: 'default', animate: false, padding: 45, nodeDimensionsIncludeLabels: true},
-    minZoom: 0.15, maxZoom: 1, wheelSensitivity: 0.3,
+    minZoom: 0.15, maxZoom: 1,
   });
   cy.on('mouseover', 'node', event => {
     cy.elements().addClass('dim');

@@ -1,0 +1,93 @@
+﻿// Optional real-browser acceptance using only Node built-ins and an installed Chrome.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {existsSync} from 'node:fs';
+import {mkdtemp,readFile,rm,writeFile,mkdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve,basename} from 'node:path';
+import {spawn} from 'node:child_process';
+import {setTimeout as delay} from 'node:timers/promises';
+import {previewServer} from './ui_v2_fixture.mjs';
+const chrome = process.env.ATLAS_TEST_CHROME || join(process.env.ProgramFiles || '', 'Google','Chrome','Application','chrome.exe');
+test('round 5 browser: layouts, themes, search, drawer, graph and responsive navigation', {skip:process.env.ATLAS_TEST_BROWSER !== '1' ? 'Set ATLAS_TEST_BROWSER=1 for the installed-Chrome render check' : !existsSync(chrome) ? 'Chrome is not installed' : false,timeout:60000}, async t => {
+  const profile = await mkdtemp(join(tmpdir(),'atlas-ui-browser-'));
+  const {server,url} = await previewServer();
+  const child = spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--disable-extensions','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true,stdio:['ignore','ignore','pipe']});
+  child.stderr.on('data',chunk=>{if(process.env.ATLAS_BROWSER_DEBUG) process.stderr.write(chunk);});
+  let ws;
+  t.after(async () => {
+    ws?.close(); child.kill(); server.close();
+    // Only remove the unique temporary browser profile created by this test.
+    assert.equal(resolve(profile).startsWith(resolve(tmpdir())),true);
+    assert.ok(basename(profile).startsWith('atlas-ui-browser-'));
+    await rm(profile,{recursive:true,force:true,maxRetries:20,retryDelay:100});
+  });
+  let port;
+  for (let i=0;i<100;i++) {try {port=(await readFile(join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0];break;} catch {await delay(100);}}
+  assert.ok(port,'Chrome must start its local debugging endpoint');
+  const targets=await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+  ws=new WebSocket(targets.find(x=>x.type==='page').webSocketDebuggerUrl);
+  await new Promise((res,rej)=>{ws.onopen=res;ws.onerror=rej;});
+  let serial=0; const pending=new Map(); const errors=[];
+  ws.onmessage=event=>{
+    const msg=JSON.parse(event.data);
+    if(msg.id){const [res,rej]=pending.get(msg.id)||[];pending.delete(msg.id);msg.error?rej?.(msg.error):res?.(msg.result);}
+    if(msg.method==='Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.text);
+    if(msg.method==='Runtime.consoleAPICalled' && ['error','warning'].includes(msg.params.type)) errors.push(msg.params.args.map(a=>a.value).join(' '));
+  };
+  const call=(method,params={})=>new Promise((res,rej)=>{const id=++serial;const timer=setTimeout(()=>{pending.delete(id);rej(new Error(`CDP timeout: ${method} ${params.expression || ''}`));},10000);pending.set(id,[value=>{clearTimeout(timer);res(value);},err=>{clearTimeout(timer);rej(err);}]);ws.send(JSON.stringify({id,method,params}));});
+  const evaluate=async expression=>{const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
+  const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await delay(50);}assert.fail(`UI condition timed out: ${expression}`);};
+  const screenshot=async name=>{if(process.env.ATLAS_UI_SCREENSHOTS){await mkdir(process.env.ATLAS_UI_SCREENSHOTS,{recursive:true});const r=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(join(process.env.ATLAS_UI_SCREENSHOTS,`${name}.png`),Buffer.from(r.data,'base64'));}};
+  await call('Runtime.enable'); await call('Page.enable');
+  await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+  await call('Page.navigate',{url});await wait('document.querySelectorAll(".question-card").length === 4');
+  assert.equal(await evaluate('document.querySelector(".sidebar").getBoundingClientRect().width'),248);
+  assert.ok(await evaluate('Math.max(...[...document.querySelectorAll(".question-card")].map(x=>x.offsetHeight))-Math.min(...[...document.querySelectorAll(".question-card")].map(x=>x.offsetHeight)) <= 1'));
+  assert.equal(await evaluate('[...document.querySelectorAll(".question-card")].every(x=>x.querySelectorAll(".derived-label").length===1)'),true);
+  await screenshot('home-light');
+  await evaluate('location.hash="#/line/fiction-topic"');await wait('!!document.querySelector(".line-layout")');
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".line-aside")).position'),'sticky');
+  assert.equal(await evaluate('document.querySelector(".line-aside").offsetWidth'),220);
+  assert.ok(await evaluate('document.querySelector(".stream").offsetWidth<=760'));
+  assert.equal(await evaluate('document.querySelector(".axis-point").offsetWidth'),140);
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".axis-dot")).boxShadow'),'none');
+  await screenshot('line-light');
+  await evaluate('document.querySelectorAll(".axis-point")[12].click()');
+  assert.equal(await evaluate('document.activeElement.id'),'point-fiction-s12');
+  assert.equal(await evaluate('document.activeElement.closest("details").open'),true);
+  assert.equal(await evaluate('document.querySelectorAll(".axis-point")[12].getAttribute("aria-current")'),'true');
+  await evaluate('document.getElementById("theme").click()');await wait('document.documentElement.dataset.theme==="dark" && !!document.querySelector(".line-layout")');
+  await screenshot('line-dark');
+  await evaluate('location.hash="#/entity/fiction-topic"');await wait('!!document.querySelector("#graph canvas")');
+  assert.equal(await evaluate('document.getElementById("graph").offsetHeight'),320);
+  assert.equal(await evaluate('document.querySelectorAll(".mention-row").length'),12);
+  assert.equal(await evaluate('document.querySelectorAll(".mention-row")[11].querySelector("button").dataset.index'),'11');
+  await screenshot('entity-dark');
+  await evaluate('document.querySelector(".mention-row button").click()');await wait('!!document.querySelector("#evidence blockquote")');
+  assert.equal(await evaluate('document.getElementById("evidence").offsetWidth'),520);
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".drawer-head")).position'),'sticky');
+  await screenshot('drawer-dark');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await wait('!document.getElementById("evidence").open');
+  assert.equal(await evaluate('document.getElementById("evidence-body").innerHTML'),'');
+  await evaluate('document.getElementById("search").focus();document.getElementById("search").value="虚构";document.getElementById("search").dispatchEvent(new Event("input"))');
+  await wait('document.querySelectorAll(".search-group").length===3');
+  assert.equal(await evaluate('document.getElementById("search-results").offsetWidth'),360);
+  assert.ok(await evaluate('document.querySelectorAll("#search-results mark").length>0'));
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
+  assert.equal(await evaluate('document.querySelector("#search-results a").classList.contains("selected")'),true);
+  await screenshot('search-dark');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await wait('!!document.querySelector(".line-layout")');
+  for (const width of [1280,1024,390]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false});
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),`no page overflow at ${width}`);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".line-aside")).display'),width>=1280?'block':'none');
+  }
+  await screenshot('line-mobile');
+  await evaluate('location.hash="#/entity/fiction-topic"');await wait('!!document.querySelector("#graph canvas")');
+  await evaluate('document.querySelector(".mention-row button").click()');await wait('!!document.querySelector("#evidence blockquote")');
+  assert.ok(await evaluate('document.getElementById("evidence").offsetWidth<=innerWidth'));
+  await screenshot('drawer-mobile');
+  assert.deepEqual(errors,[]);
+});

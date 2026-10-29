@@ -126,6 +126,27 @@ class EntityTests(unittest.TestCase):
         self.assertEqual(payload['merge_suggestions'], [])
         self.assertFalse((self.root / 'entities.sqlite').exists())
 
+    def test_mention_display_metadata_is_read_only_and_counts_visible_nodes(self):
+        index_mentions(self.root)
+        with contextlib.closing(sqlite3.connect(self.root / 'corpus.sqlite')) as db:
+            db.execute("UPDATE documents SET channel='Fictional garden session' WHERE id='fiction-doc-0'")
+            db.commit()
+        before = {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        payload = ReadModel(self.root).get('entity', {'id': 'a'})
+        mention = payload['mentions'][0]
+        self.assertEqual(mention['display_name'], 'Fictional garden session')
+        self.assertEqual(mention['associated_node_count'], 4)
+        self.assertIsNone(mention['ts'])
+        self.assertNotIn('text', mention)
+        self.assertNotIn('quote', mention)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+        with contextlib.closing(sqlite3.connect(self.root / 'graph.sqlite')) as db:
+            # Remove an alias without rebuilding the index; stale matches must not count.
+            db.execute("DELETE FROM aliases WHERE id='alias'")
+            db.commit()
+        other = ReadModel(self.root).get('entity', {'id': 'd'})
+        self.assertEqual(other['mentions'][0]['associated_node_count'], 3)
+
 
     def test_short_names_ascii_boundaries_and_unicode_offsets(self):
         self.assertEqual(list(alias_matches('cloak oak oakwood', 'oak')), [6])
