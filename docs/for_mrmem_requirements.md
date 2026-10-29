@@ -107,3 +107,17 @@ ATLAS 的 `Backend` 仅规定 toc/home/lines/line/entities/entity/search/evidenc
 实体规则索引与合并建议存在独立 entities.sqlite，建议不执行合并；实体摘要保持空。
 本轮未创建主题层级、立场词表、对错关系或 Line 摘要的 ATLAS 表。
 Round 2 文档和任务模板保留为历史设计材料，上述用户决定优先于其中的未来表提案。
+
+## 9. 判断线归并与线级综述字段（小样本实验 2026-10-29 验证）
+背景：分批聚类导致同一主题被拆成多条线（样本中 1 个主题 9 条线）；页面只能平铺单句。ATLAS 小样本实验（`experiments/digest/`）证明"先归并、再综述、每句挂引用"可行，结果目前只存为任务输出文件，需要后端原生字段承接。
+- `lines.merged_into`（string，可空）：被归并到的目标 line_id；`lines.member_line_ids`（array）：归并线的成员。归并须保留原线与原时间线，可撤销。
+- `lines.digest`（object，可空），结构：
+  - `sentences[]`：`{section: what|view|evolution|record, text(≤120字), stance?: 看多|看空|中性|计划|观察, ts?: YYYY-MM-DD, outcome?: confirmed|refuted|mixed|unknown, evidence[]: {doc_id, quote}|统一证据指针}`
+  - `generated_by`（runner/model）、`generated_at`、`input_hash`（成员点集合变化即失效）、`validation`（通过的句数/总句数）。
+- 约束：每句 ≥1 条可回读证据；句内数字必须出现在其证据中；`view` 句必须带 stance；立场五档枚举固定。
+
+## 10. 实体/主题级综述字段
+- `nodes.digest`（object，可空），结构同第 9 节 `sentences[]`，四段：它是什么 / 用户核心看法(含 stance) / 如何演变 / 对错记录。
+- `nodes.digest_sources`：参与生成的 statement_id、line_id、去重后的提及指针列表（提及同文档 300 字内合并）。
+- 失效规则：关联表态、关联线或别名变化时标记 `stale=true`，前端显示"综述可能过期"并仍可展开依据。
+- 前端只读这些字段；缺失时显示"尚无综述"与派生统计，不自行持久化。
