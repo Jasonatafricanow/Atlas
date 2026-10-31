@@ -1,0 +1,71 @@
+{
+  "documents": [
+    {
+      "id": "fiction-market-0",
+      "text": "虚构纸月板块中的TEST001报价为3,651.43元。",
+      "ts": "2025-01-01"
+    },
+    {
+      "id": "fiction-market-1",
+      "text": "我看多TEST001，计划仓位２．１％，观察量为２．１万。",
+      "ts": "2025-02-01"
+    },
+    {
+      "id": "fiction-market-2",
+      "text": "TEST001仍以3,651.43元作为观察价。",
+      "ts": "2025-03-01"
+    },
+    {
+      "id": "fiction-market-3",
+      "text": "TEST001的结果尚未核验，继续观察。",
+      "ts": "2025-04-01"
+    }
+  ],
+  "digest": {
+    "sentences": [
+      {
+        "section": "what",
+        "text": "TEST001属于虚构纸月板块，观察价3651.43元。",
+        "evidence": [
+          {
+            "doc_id": "fiction-market-0",
+            "quote": "虚构纸月板块中的TEST001报价为3,651.43元。"
+          }
+        ]
+      },
+      {
+        "section": "view",
+        "text": "你看多TEST001，计划仓位2.1%，观察量21000。",
+        "evidence": [
+          {
+            "doc_id": "fiction-market-1",
+            "quote": "我看多TEST001，计划仓位２．１％，观察量为２．１万。"
+          }
+        ],
+        "stance": "看多"
+      },
+      {
+        "section": "evolution",
+        "text": "TEST001继续以3651.43元作为观察价。",
+        "evidence": [
+          {
+            "doc_id": "fiction-market-2",
+            "quote": "TEST001仍以3,651.43元作为观察价。"
+          }
+        ],
+        "ts": "2025-03-01"
+      },
+      {
+        "section": "record",
+        "text": "TEST001的结果仍未知。",
+        "evidence": [
+          {
+            "doc_id": "fiction-market-3",
+            "quote": "TEST001的结果尚未核验，继续观察。"
+          }
+        ],
+        "outcome": "unknown"
+      }
+    ]
+  }
+}

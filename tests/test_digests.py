@@ -117,6 +117,58 @@ class DigestTests(unittest.TestCase):
         self.assertIsNone(self.source().for_entity("fiction-garden"))
         self.assertIsNotNone(self.source(True).for_line("fiction-line-0"))
 
+    def test_optional_metadata_duplicate_quotes_and_empty_evidence(self):
+        points = json.loads((self.root / 'B_line1/input.json').read_text(encoding='utf-8'))['points']
+        write(self.root, 'B_line1/input.json', {'points':points, 'mentions':None})
+        for sentence in self.output['sentences']:
+            sentence.setdefault('ts', None)
+            sentence.setdefault('outcome', None)
+            sentence.setdefault('stance', None)
+            sentence['evidence'] *= 2
+        write(self.root, 'B_line1.json', self.output)
+        digest = self.source().for_line('B_line1')
+        self.assertEqual(digest['validation']['valid'], 4)
+        self.assertEqual(len(digest['sentences'][0]['evidence']), 1)
+        self.assertNotIn('ts', digest['sentences'][0])
+        for evidence in ([], None, [None], [{'doc_id':'fiction-doc-0','quote':'  '}]):
+            self.output['sentences'][0]['evidence'] = evidence
+            write(self.root, 'B_line1.json', self.output)
+            digest = self.source().for_line('B_line1')
+            self.assertEqual(digest['validation'], {'valid':3, 'total':4, 'dropped':1})
+        for sentence in self.output['sentences']:
+            sentence['evidence'] = []
+        write(self.root, 'B_line1.json', self.output)
+        self.assertIsNone(self.source().for_line('B_line1'))
+
+    def test_real_line_id_takes_precedence_over_experiment_alias(self):
+        from atlas.backends.atlas_sqlite import AtlasSqliteBackend
+        from atlas.graph.store import GraphStore
+        graph = GraphStore(self.data)
+        row = graph.get('lines', 'fiction-line-0')
+        graph.put('lines', dict(row, line_id='B_line1'))
+        graph.close()
+        # The real line is not a member of A_merged; do not attach another digest.
+        self.assertIsNone(self.source().for_line('B_line1'))
+        data = AtlasSqliteBackend(self.data, digest_dir=self.root).line({'id':'B_line1'})
+        self.assertIsNone(data['digest'])
+        self.assertIsNotNone(self.source().for_line('fiction-line-0'))
+
+    def test_merged_alias_never_resurrects_hidden_or_stale_members(self):
+        from atlas.backends.atlas_sqlite import AtlasSqliteBackend
+        from atlas.graph.store import GraphStore
+        graph = GraphStore(self.data)
+        row = graph.get('statements', 'fiction-s0')
+        row['sensitive'] = True
+        graph.put('statements', row)
+        graph.close()
+        self.assertIsNone(self.source().for_line('B_line1'))
+        with self.assertRaises(KeyError):
+            AtlasSqliteBackend(self.data, digest_dir=self.root).line({'id':'B_line1'})
+        self.assertIsNotNone(self.source(True).for_line('B_line1'))
+        write(self.root, 'A_merged.json', {'merged':[{'title':'Fiction', 'reason':'Fiction',
+                                                    'member_line_ids':['missing-line']}]})
+        self.assertIsNone(self.source(True).for_line('B_line1'))
+
     def test_config_cli_default_and_explicit_precedence(self):
         from unittest.mock import patch
         from atlas.cli import main
@@ -152,13 +204,16 @@ class DigestTests(unittest.TestCase):
                         return response.status, json.loads(response.read())
                     finally:
                         client.close()
-                for route, identifier in [('line','fiction-line-0'),('line','fiction-line-1'),('line','fiction-garden'),('entity','fiction-garden')]:
+                for route, identifier in [('line','B_line1'),('line','fiction-line-0'),('line','fiction-line-1'),('line','fiction-garden'),('entity','fiction-garden')]:
                     status, payload = get(route, id=identifier)
                     self.assertEqual(status, 200)
                     self.assertEqual(len(payload['digest']['sentences']), 4)
                     self.assertFalse({'before','after','context'} & set(payload['digest']))
                     self.assertNotIn('虚构记录：', json.dumps(payload['digest'], ensure_ascii=False))
                 self.assertEqual(len(get('home')[1]['home_views']), 6)
+                self.assertEqual(get('line', id='B_line0')[0], 404)
+                self.assertEqual(get('line', id='B_line2')[0], 404)
+                self.assertEqual(get('evidence',kind='digest_line',id='B_line1',doc_id='fiction-doc-0',quote='先在小花圃试种')[0],200)
                 self.assertEqual(get('evidence',kind='digest_entity',id='fiction-garden',doc_id='fiction-doc-0',quote='先在小花圃试种')[0],200)
                 self.assertEqual(get('evidence',kind='digest_line',id='fiction-line-0',doc_id='fiction-doc-0',quote='未授权引文')[0],404)
             finally:

@@ -7,7 +7,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from experiments.digest.validate import validate_digest
+from experiments.digest.validate import normalize_sentence, validate_digest
 from ..tasks.validate import check_schema
 from ..web_data import connect
 
@@ -33,13 +33,14 @@ class DigestSource:
         self.root = Path(digest_dir)
         self.model = model
         self._loaded = False
-        self._lines, self._entities = {}, {}
+        self._lines, self._entities, self._merged = {}, {}, {}
 
     def _load(self):
         if self._loaded:
             return
         self._loaded = True
         rows = self.model.snapshot()
+        self._line_ids = {line["line_id"] for line in rows["lines"]}
         self.sources = {s["statement_id"]: s for s in rows["statements"]}
         self.sources.update({p["prop_id"]: p for p in rows["propositions"]})
         self.docs = {}
@@ -67,6 +68,7 @@ class DigestSource:
                 if digest:
                     digest.update(title=group["title"], merged_title=group["title"], member_line_ids=ids,
                                   source={"route": "line", "id": ids[0], "title": group["title"]})
+                    self._merged[f"B_line{k}"] = digest
                     for lid in ids:
                         self._lines[lid] = digest
         for output in sorted(self.root.glob("C_entity*.json")):
@@ -97,8 +99,7 @@ class DigestSource:
         out = read_json(self.root / (stem + ".json"))
         if (not isinstance(inp, dict) or not isinstance(inp.get(field), list)
                 or not inp[field] or not isinstance(out, dict) or set(out) != {"sentences"}
-                or not isinstance(out["sentences"], list) or len(out["sentences"]) < 4
-                or (field == "points" and not isinstance(inp.get("title"), str))):
+                or not isinstance(out["sentences"], list) or len(out["sentences"]) < 4):
             return None
         points = inp[field]
         if any(not isinstance(p, dict) or not isinstance(p.get("ref"), str) for p in points):
@@ -114,7 +115,7 @@ class DigestSource:
         if field == "points" and refs != allowed:
             return None
         docs = {e["doc_id"] for s in sources for e in s.get("evidence", [])}
-        mentions = inp.get("mentions", [])
+        mentions = inp.get("mentions") or []
         if not isinstance(mentions, list) or any(not isinstance(m, dict) or not isinstance(m.get("doc_id"), str) for m in mentions):
             return None
         docs.update(m["doc_id"] for m in mentions)
@@ -131,7 +132,8 @@ class DigestSource:
                 text = self.docs[e["doc_id"]]
                 if not 0 <= start < end <= len(text) or hashlib.sha256(text[start:end].encode()).hexdigest()[:12] != e["quote_hash"]:
                     return None
-        candidates = [s for s in out["sentences"] if not check_schema(s, self.sentence_schema)]
+        normalized = [normalize_sentence(s) for s in out["sentences"]]
+        candidates = [s for s in normalized if not check_schema(s, self.sentence_schema)]
         extra = json.dumps([s.get("ts") for s in sources])
         _, checks = validate_digest({"sentences": candidates}, {d: self.docs[d] for d in docs}, extra)
         sentences = [s for s, (_, ok, _) in zip(candidates, checks) if ok and
@@ -146,7 +148,9 @@ class DigestSource:
 
     def for_line(self, line_id):
         self._load()
-        return self._lines.get(line_id)
+        if line_id in self._line_ids:
+            return self._lines.get(line_id)
+        return self._merged.get(line_id)
 
     def for_entity(self, node_id):
         self._load()

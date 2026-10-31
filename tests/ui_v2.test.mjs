@@ -315,3 +315,30 @@ test('home prefers digest sentences in all four questions and retains fallback',
   assert.doesNotMatch(html,/class="nums"/);
   assert.match(views.homeView({...data,home_views:[]}),/暂无已记录的观点变化/);
 });
+
+
+test('digest citation numbers restart per section with unique tooltips and exact drawer refs', async () => {
+  const {fictionalDigest} = await import('./ui_v2_fixture.mjs');
+  for (const route of ['line','entity']) {
+    const digest = fictionalDigest(route);
+    const html = views.digestCard(digest);
+    const sections = [...html.matchAll(/<section class="digest-section">(.*?)<\/section>/gs)];
+    const tooltipIds = [...html.matchAll(/role="tooltip" id="([^"]+)"/g)].map(m=>m[1]);
+    assert.equal(new Set(tooltipIds).size, tooltipIds.length);
+    for (const [i,section] of sections.entries()) {
+      const key = ['what','view','evolution','record'][i];
+      const rows = digest.sentences.filter(s=>s.section===key);
+      if (key==='evolution') rows.sort((a,b)=>a.ts.localeCompare(b.ts));
+      const expected = rows.flatMap(s=>s.evidence);
+      const buttons = [...section[1].matchAll(/<button ([^>]+)>\[(\d+)\]<\/button>/g)];
+      assert.deepEqual(buttons.map(m=>Number(m[2])), expected.map((_,i)=>i+1));
+      buttons.forEach(([_,attrs,number],j)=>{
+        assert.ok(attrs.includes(`data-kind="digest_${route}"`));
+        assert.ok(attrs.includes(`data-id="${digest.source.id}"`));
+        assert.ok(attrs.includes(`data-doc-id="${expected[j].doc_id}"`));
+        assert.ok(attrs.includes(`data-quote="${expected[j].quote}"`));
+        assert.ok(attrs.includes(`aria-describedby="quote-${route}-${digest.source.id}-${key}-${number}"`));
+      });
+    }
+  }
+});

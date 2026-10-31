@@ -39,10 +39,10 @@ const digestBadges = sentence => stanceBadge(sentence.stance) + (sentence.outcom
 const digestTime = ts => Number.isFinite(Date.parse(ts)) ? Date.parse(ts) : Infinity;
 const evolutionOrder = (a,b) => digestTime(a.ts) - digestTime(b.ts);
 
-function digestReferences(sentence, source, next) {
+function digestReferences(sentence, source, section, next) {
   const refs = (sentence.evidence || []).map(e => {
     const number = next();
-    const tooltip = `quote-${source.route}-${encodeURIComponent(source.id)}-${number}`;
+    const tooltip = `quote-${source.route}-${encodeURIComponent(source.id)}-${section}-${number}`;
     return `<span class="digest-ref"><button data-evidence data-kind="digest_${esc(source.route)}" data-id="${esc(source.id)}" data-doc-id="${esc(e.doc_id)}" data-quote="${esc(e.quote)}" aria-label="引用 ${number}" aria-describedby="${esc(tooltip)}">[${number}]</button><span class="quote-tooltip" role="tooltip" id="${esc(tooltip)}">${esc(e.quote)}</span></span>`;
   });
   return `<div class="digest-refs">${refs.slice(0,2).join('')}${refs.length > 2 ? `<details class="digest-ref-more"><summary aria-label="展开其余 ${refs.length-2} 条引用">+${refs.length-2}</summary>${refs.slice(2).join('')}</details>` : ''}</div>`;
@@ -50,9 +50,9 @@ function digestReferences(sentence, source, next) {
 
 export function digestCard(digest) {
   if (!digest?.sentences?.length) return '<p class="digest-fallback">尚未生成综述</p>';
-  let number = 0;
-  const sentence = s => `${digestBadges(s)}${esc(s.text)}${digestReferences(s,digest.source,()=>++number)}`;
   const sections = digestSections.map(([key,heading]) => {
+    let number = 0;
+    const sentence = s => `${digestBadges(s)}${esc(s.text)}${digestReferences(s,digest.source,key,()=>++number)}`;
     const rows = digest.sentences.filter(s => s.section === key);
     const body = key === 'evolution' ? `<ol class="digest-timeline">${rows.slice().sort(evolutionOrder).map(s=>`<li><time>${date(s.ts)}</time><div class="digest-timeline-text">${sentence(s)}</div></li>`).join('')}</ol>` : rows.map(s=>`<div class="digest-sentence">${sentence(s)}</div>`).join('');
     return `<section class="digest-section"><h3>${heading}</h3>${rows.length ? body : '<p class="meta">暂无通过校验的句子</p>'}</section>`;

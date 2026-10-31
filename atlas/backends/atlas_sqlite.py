@@ -24,7 +24,16 @@ class AtlasSqliteBackend:
         return self.model.get("lines", params)
 
     def line(self, params):
-        data = self.model.get("line", params)
+        try:
+            data = self.model.get("line", params)
+        except KeyError:
+            # Experiment output IDs (B_line1, ...) are not stored graph IDs.
+            # Resolve only through a currently validated merge membership.
+            digest = self.digest_source.for_line(params.get("id")) if self.digest_source else None
+            if not digest:
+                raise
+            data = self.model.get("line", dict(params, id=digest["source"]["id"]))
+            return dict(data, digest=digest, digests=[digest])
         if self.digest_source:
             ids = [l["line_id"] for l in data["line"]["lines"]]
             if params.get("id") in ids:

@@ -27,3 +27,68 @@ def test_view_needs_stance_and_sections():
 def test_merge_partition():
     assert v.validate_merge({"merged": [{"member_line_ids": ["a", "b"]}]}, ["a", "b"]) == []
     assert v.validate_merge({"merged": [{"member_line_ids": ["a"]}]}, ["a", "b"])
+
+
+def test_optional_fields_and_duplicate_quotes():
+    d = good()
+    d['sentences'][0].update(ts=None, outcome=None, stance=None)
+    d['sentences'][1]['evidence'] *= 2
+    errs, per = v.validate_digest(d, DOCS)
+    assert not errs and all(ok for _, ok, _ in per)
+
+
+def test_empty_missing_and_malformed_evidence_fail_without_crashing():
+    for evidence in (None, [], {}, 'wrong', [None], [{}], [{'doc_id':'d1','quote':'  '}],
+                     [{'doc_id':'d1','quote':''}], [{'doc_id':[], 'quote':'the widget'}]):
+        d = good()
+        d['sentences'][0]['evidence'] = evidence
+        assert not v.validate_digest(d, DOCS)[1][0][1]
+    d = good()
+    del d['sentences'][0]['evidence']
+    assert not v.validate_digest(d, DOCS)[1][0][1]
+    for out in (None, [], {'sentences':None}, {'sentences':'wrong'}, {'sentences':[None,1]}):
+        errs, per = v.validate_digest(out, DOCS)
+        assert errs or any(not ok for _,ok,_ in per)
+
+
+def test_number_formats_preserve_value_scale_sign_and_percent():
+    cases = [
+        ('3651.43', '3,651.43', True), ('3,651.43', '3651.43', True),
+        ('价格：３，６５１．４３；上涨２．１％。', '价格:3651.43;上涨2.1%。', True),
+        ('数量2.1万', '数量21000', True), ('数量21000', '数量２．１万', True),
+        ('2.10 percent', '２．１％', True), ('0.5%', '.50%', True),
+        ('12', '312', False), ('3651.4', '3651.43', False),
+        ('21', '2.1万', False), ('2.1', '2.1万', False),
+        ('2.1%', '2.1', False), ('2.1', '2.1%', False),
+        ('-2.1%', '2.1%', False), ('2.1%', '-2.1%', False),
+        ('3651.44', '3,651.43', False), ('34', '12,34', False),
+        ('1.2', '1.20', True), ('−2.1%', '-2.1%', True),
+        ('2.1%', '−2.1%', False),
+    ]
+    for claim, quote, expected in cases:
+        d = {'sentences':[{'section':'what','text':claim,'evidence':[{'doc_id':'d','quote':quote}]}]}
+        assert v.validate_digest(d, {'d':quote})[1][0][1] is expected, (claim,quote)
+
+
+def test_numbers_cannot_come_from_quote_seams_or_timestamp_extras():
+    d = {'sentences':[{'section':'what','text':'虚构价格12', 'evidence':[
+        {'doc_id':'d','quote':'虚构1'}, {'doc_id':'d','quote':'2'}]}]}
+    assert not v.validate_digest(d, {'d':'虚构1 与 2'})[1][0][1]
+    d['sentences'][0]['text'] = '虚构价格2025'
+    assert not v.validate_digest(d, {'d':'虚构1 与 2'}, '2025-01-12')[1][0][1]
+    d['sentences'][0].update(text='虚构观察',ts='2025-01-12')
+    assert v.validate_digest(d, {'d':'虚构1 与 2'}, '2025-01-12')[1][0][1]
+
+
+def test_quote_matching_remains_grounded_not_number_equivalence():
+    d = {'sentences':[{'section':'what','text':'价格3651.43',
+        'evidence':[{'doc_id':'d','quote':'价格3651.43'}]}]}
+    assert not v.validate_digest(d, {'d':'价格3,651.43'})[1][0][1]
+
+
+def test_merge_malformed_members_and_empty_graph():
+    for out in (None, [], {}, {'merged':None}, {'merged':[None]},
+                {'merged':[{}]}, {'merged':[{'member_line_ids':[None]}]}):
+        assert v.validate_merge(out, ['fiction-line'])
+    assert not v.validate_merge({'merged':[]}, [])
+    assert v.validate_merge({'merged':[{'member_line_ids':['fiction-line','fiction-line']}]}, ['fiction-line'])

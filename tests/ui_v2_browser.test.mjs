@@ -9,7 +9,7 @@ import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {previewServer} from './ui_v2_fixture.mjs';
 const chrome = process.env.ATLAS_TEST_CHROME || join(process.env.ProgramFiles || '', 'Google','Chrome','Application','chrome.exe');
-test('round 6 browser: layouts, themes, search, drawer, graph and responsive navigation', {skip:process.env.ATLAS_TEST_BROWSER !== '1' ? 'Set ATLAS_TEST_BROWSER=1 for the installed-Chrome render check' : !existsSync(chrome) ? 'Chrome is not installed' : false,timeout:60000}, async t => {
+test('round 7 browser: layouts, themes, search, drawer, graph and responsive navigation', {skip:process.env.ATLAS_TEST_BROWSER !== '1' ? 'Set ATLAS_TEST_BROWSER=1 for the installed-Chrome render check' : !existsSync(chrome) ? 'Chrome is not installed' : false,timeout:60000}, async t => {
   const profile = await mkdtemp(join(tmpdir(),'atlas-ui-browser-'));
   const {server,url,requests,setDigests} = await previewServer();
   const child = spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--disable-extensions','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true,stdio:['ignore','ignore','pipe']});
@@ -68,6 +68,16 @@ test('round 6 browser: layouts, themes, search, drawer, graph and responsive nav
   await evaluate('document.getElementById("close-evidence").click()');
   await wait('!document.getElementById("evidence").open');
   assert.equal(await evaluate('document.getElementById("evidence-body").innerHTML'),'');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".digest-section")].map(s=>[...s.querySelectorAll(".digest-ref button")].map(b=>b.textContent))'),[['[1]','[2]','[3]'],['[1]'],['[1]','[2]'],['[1]','[2]']]);
+  assert.equal(await evaluate('new Set([...document.querySelectorAll(".quote-tooltip")].map(e=>e.id)).size'),8);
+  for (const [section,quote] of [[1,'试种证据'],[2,'虚构花圃'],[3,'试种证据']]) {
+    await evaluate(`document.querySelectorAll('.digest-section')[${section}].querySelector('.digest-ref button').click()`);
+    await wait('!!document.querySelector("#evidence blockquote")');
+    assert.equal(requests.at(-1).params.quote,quote);
+    assert.equal(requests.at(-1).params.id,'fiction-line');
+    await evaluate('document.getElementById("close-evidence").click()');
+    await wait('!document.getElementById("evidence").open');
+  }
   await evaluate('document.querySelector(".digest-evidence summary").click()');
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".line-aside")).position'),'sticky');
   assert.equal(await evaluate('document.querySelector(".line-aside").offsetWidth'),220);

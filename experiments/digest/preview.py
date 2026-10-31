@@ -1,6 +1,6 @@
 """Render a static preview page (digest cards + folded evidence) from a digest experiment output dir.
 Usage: python experiments/digest/preview.py OUT_DIR  -> OUT_DIR/preview.html  (open with ?t=dark for dark mode)"""
-import html, json, pathlib, sys
+import hashlib, html, json, pathlib, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SEC = [("what", "它是什么"), ("view", "你的核心看法"), ("evolution", "如何演变"), ("record", "对错记录")]
@@ -19,27 +19,32 @@ details.dg-ev{margin-top:16px;background:var(--surface);border:1px solid var(--b
 """
 
 
-def card(kick, title, meta, res, pts):
+def card(kick, title, meta, res, pts, card_id=None):
     e = html.escape
-    fns, body = [], []
+    card_id = card_id or hashlib.sha256((kick + title).encode()).hexdigest()[:12]
+    body = []
+    sentences = (res or {}).get("sentences") or []
     for key, label in SEC:
-        rows = [s for s in res.get("sentences", []) if s.get("section") == key]
+        rows = [s for s in sentences if isinstance(s, dict) and s.get("section") == key]
         if not rows:
             continue
         body.append(f'<div class="dg-sec"><h3>{label}</h3>')
+        fns = []
         for s in rows:
             refs = []
-            for ev in s["evidence"]:
-                fns.append(ev); refs.append(f'<a title="{e(ev["quote"])}">[{len(fns)}]</a>')
+            for ev in s.get("evidence") or []:
+                fns.append(ev)
+                anchor = e(f"{card_id}-{key}-{len(fns)}")
+                refs.append(f'<a href="#{anchor}" title="{e(ev["quote"])}">[{len(fns)}]</a>')
             pre = (f'<span class="dg-st">{e(s["stance"])}</span>' if s.get("stance") else "") + \
                   (f'<span class="dg-ts">{e(s["ts"])}</span>' if s.get("ts") else "") + \
                   (f'<span class="dg-st">{OUTC.get(s["outcome"], "")}</span>' if s.get("outcome") else "")
             body.append(f'<p class="dg-s">{pre}{e(s["text"])}<sup>{"".join(refs)}</sup></p>')
-        body.append("</div>")
-    fn = "".join(f'<li>[{i + 1}] <q>{e(f["quote"])}</q> · <code>{e(f["doc_id"][:14])}</code></li>' for i, f in enumerate(fns))
+        fn = "".join(f'<li id="{e(f"{card_id}-{key}-{i + 1}")}">[{i + 1}] <q>{e(f["quote"])}</q> · <code>{e(f["doc_id"][:14])}</code></li>' for i, f in enumerate(fns))
+        body.append(f'<ol class="dg-fn" style="list-style:none;padding-left:0">{fn}</ol></div>')
     pl = "".join(f'<div class="dg-pt"><span>{e((p.get("ts") or "时间未知")[:16])}</span><div>{e(p["text"])}</div></div>' for p in pts)
     return (f'<section class="dg"><div class="dg-card"><div class="dg-kick">{e(kick)}</div><h2>{e(title)}</h2><div class="dg-meta">{e(meta)}</div>'
-            f'{"".join(body)}<ol class="dg-fn" style="list-style:none;padding-left:0">{fn}</ol></div>'
+            f'{"".join(body)}</div>'
             f'<details class="dg-ev"><summary>依据 {len(pts)} 条（原始片段，默认折叠）</summary>{pl}</details></section>')
 
 
@@ -52,9 +57,9 @@ def main(out):
         res = json.loads(p.read_text(encoding="utf-8")) or {}
         inp = json.loads((out / p.stem / "input.json").read_text(encoding="utf-8"))
         if inp["kind"] == "line":
-            parts.append(card(f"判断线 · {inp.get('topic')}", inp["title"], f"由 {len(merged['merged'])} 条合并线之一 · {len(inp['points'])} 个点", res, inp["points"]))
+            parts.append(card(f"判断线 · {inp.get('topic')}", inp["title"], f"由 {len(merged['merged'])} 条合并线之一 · {len(inp['points'])} 个点", res, inp["points"], p.stem))
         else:
-            parts.append(card(f"实体 · {inp['type']}", inp["name"], f"{len(inp['statements'])} 条相关表态 · {len(inp['mentions'])} 处去重提及", res, inp["statements"]))
+            parts.append(card(f"实体 · {inp['type']}", inp["name"], f"{len(inp['statements'])} 条相关表态 · {len(inp.get('mentions') or [])} 处去重提及", res, inp["statements"], p.stem))
     page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>ATLAS 综述卡预览</title><style>{theme}{CSS}
 body{{padding:40px 24px}}</style><script>var t=new URLSearchParams(location.search).get('t');if(t)document.documentElement.dataset.theme=t;</script></head>
 <body><main style="max-width:960px;margin:0 auto;padding:0"><div class="eyebrow">小样本实验 · 静态预览</div><h1 style="margin-bottom:28px">归纳在上，片段做依据</h1>{''.join(parts)}</main></body></html>"""
