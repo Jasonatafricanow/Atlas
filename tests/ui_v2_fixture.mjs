@@ -36,7 +36,7 @@ export async function previewServer() {
         requests.push({route,params:Object.fromEntries(url.searchParams)});
         const data = {home:{nodes,lines:[line],propositions:props,derived},toc:{nodes,lines:[line]},lines:{nodes,lines:[line]},line:{node,line},entities:{nodes},entity,search:{results:[{line},{node},{proposition:props[0]}]},evidence:{quote:'虚构花圃的雨水收集需要更多试种证据。',before:'本段仅用于离线界面验收。',after:'后续记录继续保留未知，不补写事实。',pointer,ts:null,author:'虚构园丁',derived:{session_display_name:'虚构试种会话'}}}[route];
         if (showDigests && ['line','entity'].includes(route)) data.digest = fictionalDigest(route);
-        if (showDigests && route === 'home') data.home_views = fictionalDigest().sentences.filter(s=>s.section !== 'what').map(sentence=>({sentence,source:fictionalDigest().source}));
+        if (showDigests && route === 'home') data.home_views = fictionalDigest().sentences.filter(s=>s.section !== 'what').map(sentence=>({sentence,source:{...fictionalDigest().source,title:'虚构花圃用水观察与分区试种计划的长期跟进和后续记录'.repeat(4)}}));
         if (!showDigests && route === 'entity') delete data.digest;
         res.setHeader('Content-Type','application/json; charset=utf-8'); res.end(JSON.stringify(data));
       } else {

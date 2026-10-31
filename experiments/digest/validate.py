@@ -5,6 +5,26 @@ from decimal import Decimal
 
 STANCES = {"看多", "看空", "中性", "计划", "观察"}
 SECTIONS = ("what", "view", "evolution", "record")
+_DOUBLED_FUNCTION = re.compile(r"([的是了在])\1+")
+
+
+def lint_digest(out):
+    """Advisory only: one warning per repeated run in a title or sentence.
+
+    Do not inspect evidence, repair text, or change validation decisions.
+    Diagnostics identify locations without copying source content.
+    """
+    if not isinstance(out, dict):
+        return []
+    fields = [("title", out.get("title"))]
+    sentences = out.get("sentences")
+    if isinstance(sentences, list):
+        fields.extend((f"sentences[{i}].text", s.get("text"))
+                      for i, s in enumerate(sentences) if isinstance(s, dict))
+    return [{"field": field, "offset": match.start(), "code": "doubled_function_character"}
+            for field, text in fields if isinstance(text, str)
+            for match in _DOUBLED_FUNCTION.finditer(text)]
+
 # Consume the whole numeric run, including malformed grouping, so a suffix
 # cannot accidentally authorize a smaller number. NFKC handles width only;
 # quotation matching below still checks the actual source characters.

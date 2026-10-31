@@ -77,6 +77,22 @@ test('drawer cancellation and navigation discard late evidence; only theme persi
   };
   const tick = () => new Promise(resolve=>setImmediate(resolve));
   await import('../web/js/app.js'); await tick();
+  const viewport = {innerWidth:globalThis.innerWidth,innerHeight:globalThis.innerHeight};
+  try {
+    for (const width of [390,768]) {
+      globalThis.innerWidth=width; globalThis.innerHeight=844;
+      const tooltip={style:{},getClientRects:()=>[{}],getBoundingClientRect:()=>({width:248,height:180})};
+      for (const anchor of [{left:0,top:0,bottom:28},{left:width-28,top:816,bottom:844}]) {
+        const ref={querySelector:()=>tooltip,getBoundingClientRect:()=>anchor};
+        for (const event of ['pointerover','focusin']) {
+          ids.content.emit(event,{target:{closest:()=>ref}});
+          const left=parseFloat(tooltip.style.left), top=parseFloat(tooltip.style.top);
+          assert.ok(left>=8 && left+248<=width-8);
+          assert.ok(top>=8 && top+180<=836);
+        }
+      }
+    }
+  } finally {Object.assign(globalThis,viewport);}
   assert.equal(requests.filter(r=>r.url.includes('/evidence')).length,0);
   const button = new Element(); button.dataset = {kind:'statements',id:'fiction-s0',field:'evidence',index:'0'};
   button.hasAttribute = name => name === 'data-evidence';
@@ -341,4 +357,43 @@ test('digest citation numbers restart per section with unique tooltips and exact
       });
     }
   }
+});
+
+
+test('home digest selection sorts before limiting, with stable ties and unknowns last', () => {
+  const rows = [null,'2025-11-10','2025-11-10','2025-11-11','2025-11-07','invalid'].map((ts,i)=>({sentence:{section:'evolution',ts,text:`fiction-${i}`}}));
+  rows.push({sentence:{section:'evolution',ts:'2025-11-31',text:'invalid-calendar'}});
+  const before = structuredClone(rows);
+  assert.deepEqual(views.selectDigestHomeRows(rows,'changes').map(r=>r.sentence.text),['fiction-3','fiction-1','fiction-2','fiction-4']);
+  assert.deepEqual(rows,before);
+  assert.deepEqual(views.selectDigestHomeRows([rows[0],rows[5]],'changes'),[rows[0],rows[5]]);
+  for (const [question,section,extra] of [['views','view',{}],['pending','view',{stance:'计划'}],['outcomes','record',{outcome:'confirmed'}]]) {
+    const input = rows.map(r=>({sentence:{...r.sentence,section,...extra}}));
+    assert.deepEqual(views.selectDigestHomeRows(input,question).map(r=>r.sentence.text),['fiction-3','fiction-1','fiction-2','fiction-4']);
+  }
+  const zones = ['2025-11-10T10:00:00+08:00','2025-11-10T04:00:00Z'].map(ts=>({sentence:{section:'evolution',ts}}));
+  assert.deepEqual(views.selectDigestHomeRows(zones,'changes'),zones.slice().reverse());
+});
+
+test('source truncation preserves the full escaped title and native keyboard link', () => {
+  const source={route:'line',id:'fiction / route',title:'<虚构> "长标题" & '.repeat(30)};
+  const html=views.digestSourceLink(source);
+  assert.match(html, /^<a class="digest-source" href="#\/line\/fiction%20%2F%20route"/);
+  assert.ok(html.includes(`title="${views.esc(source.title)}"`));
+  assert.ok(html.includes(`>${views.esc(source.title)} ↗</a>`));
+  assert.doesNotMatch(html, /tabindex="-1"|<虚构>/);
+  const css=readFileSync(new URL('../web/theme.css',import.meta.url),'utf8');
+  assert.match(css,/\.digest-source\{[^}]*white-space:nowrap[^}]*overflow:hidden[^}]*text-overflow:ellipsis/);
+});
+
+test('home digest cards label once, explain chronology and show short counts', async () => {
+  const {fictionalDigest}=await import('./ui_v2_fixture.mjs');
+  const digest=fictionalDigest();
+  const data={lines:[],nodes:[],propositions:[],home_views:digest.sentences.map(sentence=>({sentence,source:digest.source}))};
+  const html=views.homeView(data);
+  assert.equal((html.match(/模型综述/g)||[]).length,4);
+  assert.equal((html.match(/按事件时间从新到旧，时间未知置后/g)||[]).length,4);
+  assert.equal((html.match(/仅 [12] 条已有综述/g)||[]).length,4);
+  assert.ok(html.indexOf('后来暂停') < html.indexOf('最初从小花圃'));
+  assert.match(views.digestCard({...digest,validation:{...digest.validation,warnings:2}}),/提示 2 项/);
 });

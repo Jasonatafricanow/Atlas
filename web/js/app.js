@@ -37,6 +37,27 @@ drawer.addEventListener('close', () => {
 });
 document.getElementById('close-evidence').addEventListener('click', closeEvidence);
 
+// Fixed positioning keeps citation previews inside the viewport at either edge.
+function positionQuote(ref) {
+  const tooltip = ref.querySelector('.quote-tooltip');
+  if (!tooltip || !tooltip.getClientRects().length) return;
+  const anchor = ref.getBoundingClientRect();
+  const box = tooltip.getBoundingClientRect();
+  const margin = 8;
+  const left = Math.max(margin, Math.min(anchor.left, innerWidth - box.width - margin));
+  const above = anchor.top - box.height - margin;
+  const top = Math.max(margin, Math.min(above >= margin ? above : anchor.bottom + margin, innerHeight - box.height - margin));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+for (const event of ['pointerover','focusin']) main.addEventListener(event, e => {
+  const ref = e.target.closest('.digest-ref');
+  if (ref) positionQuote(ref);
+});
+const repositionQuotes = () => main.querySelectorAll('.digest-ref:hover,.digest-ref:focus-within').forEach(positionQuote);
+window.addEventListener('resize', repositionQuotes);
+window.addEventListener('scroll', repositionQuotes, true);
+
 async function openEvidence(button) {
   closeEvidence();
   const version = ++drawerVersion;

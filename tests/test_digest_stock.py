@@ -74,7 +74,7 @@ def test_stock_sector_digest_pipeline():
         backend = AtlasSqliteBackend(data, digest_dir=outputs)
         for identifier in ("B_line1", member):
             digest = backend.line({"id":identifier})["digest"]
-            assert digest["validation"] == {"valid":4,"total":4,"dropped":0}
+            assert digest["validation"] == {"valid":4,"total":4,"dropped":0,"warnings":0}
             assert digest["sentences"][1]["stance"] == "看多"
             for sentence in digest["sentences"]:
                 for evidence in sentence["evidence"]:

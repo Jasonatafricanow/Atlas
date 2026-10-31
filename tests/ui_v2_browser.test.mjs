@@ -9,7 +9,7 @@ import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {previewServer} from './ui_v2_fixture.mjs';
 const chrome = process.env.ATLAS_TEST_CHROME || join(process.env.ProgramFiles || '', 'Google','Chrome','Application','chrome.exe');
-test('round 7 browser: layouts, themes, search, drawer, graph and responsive navigation', {skip:process.env.ATLAS_TEST_BROWSER !== '1' ? 'Set ATLAS_TEST_BROWSER=1 for the installed-Chrome render check' : !existsSync(chrome) ? 'Chrome is not installed' : false,timeout:60000}, async t => {
+test('round 8 browser: layouts, themes, search, drawer, graph and responsive navigation', {skip:process.env.ATLAS_TEST_BROWSER !== '1' ? 'Set ATLAS_TEST_BROWSER=1 for the installed-Chrome render check' : !existsSync(chrome) ? 'Chrome is not installed' : false,timeout:60000}, async t => {
   const profile = await mkdtemp(join(tmpdir(),'atlas-ui-browser-'));
   const {server,url,requests,setDigests} = await previewServer();
   const child = spawn(chrome,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-background-networking','--disable-sync','--disable-extensions','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{windowsHide:true,stdio:['ignore','ignore','pipe']});
@@ -43,7 +43,7 @@ test('round 7 browser: layouts, themes, search, drawer, graph and responsive nav
   await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await call('Page.navigate',{url});await wait('document.querySelectorAll(".question-card").length === 4');
   assert.equal(await evaluate('document.querySelector(".sidebar").getBoundingClientRect().width'),248);
-  assert.ok(await evaluate('Math.max(...[...document.querySelectorAll(".question-card")].map(x=>x.offsetHeight))-Math.min(...[...document.querySelectorAll(".question-card")].map(x=>x.offsetHeight)) <= 1'));
+  assert.ok(await evaluate('[0,2].every(i=>Math.abs(document.querySelectorAll(".question-card")[i].getBoundingClientRect().bottom-document.querySelectorAll(".question-card")[i+1].getBoundingClientRect().bottom)<=1)'));
   assert.equal(await evaluate('[...document.querySelectorAll(".question-card")].every(x=>x.querySelectorAll(".derived-label").length===1)'),true);
   assert.equal(await evaluate('document.querySelectorAll(".digest-home-row").length'),6);
   assert.equal(requests.filter(r=>r.route==='evidence').length,0);
@@ -119,7 +119,7 @@ test('round 7 browser: layouts, themes, search, drawer, graph and responsive nav
   await screenshot('search-dark');
   await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});await wait('!!document.querySelector(".line-layout")');
   await evaluate('document.querySelector(".digest-evidence summary").click()');
-  for (const width of [1280,1024,390]) {
+  for (const width of [1280,1024,768,390]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false});
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),`no page overflow at ${width}`);
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".line-aside")).display'),width>=1280?'block':'none');
@@ -135,6 +135,33 @@ test('round 7 browser: layouts, themes, search, drawer, graph and responsive nav
   assert.ok(await evaluate('document.getElementById("evidence").offsetWidth<=innerWidth'));
   await screenshot('drawer-mobile');
   await evaluate('document.getElementById("close-evidence").click()');
+  for (const theme of ['light','dark']) {
+    for (const width of [390,768]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false});
+      await evaluate(`document.documentElement.dataset.theme=${JSON.stringify(theme)}`);
+      for (const route of ['home','line/fiction-topic','entity/fiction-topic']) {
+        await evaluate(`location.hash=${JSON.stringify('#/'+route)}`);
+        await wait(route==='home' ? '!!document.querySelector(".question-grid")' : route.startsWith('line/') ? '!!document.querySelector(".line-layout")' : '!!document.querySelector(".entity-layout")');
+        assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),`${route} ${theme} ${width}: no overflow`);
+        if (route==='home') {
+          assert.ok(await evaluate('[...document.querySelectorAll(".question-card")].every((c,i,a)=>!i || c.getBoundingClientRect().top>=a[i-1].getBoundingClientRect().bottom)'), 'cards stack');
+          assert.ok(await evaluate('[...document.querySelectorAll(".digest-source")].every(a=>a.scrollWidth>a.clientWidth && getComputedStyle(a).textOverflow==="ellipsis" && a.title && a.tabIndex===0)'), 'long sources truncate and remain keyboard links');
+          assert.equal(await evaluate('document.querySelectorAll(".digest-count-hint").length'),4);
+        } else {
+          assert.ok(await evaluate('[...document.querySelectorAll(".digest-ref button,.digest-ref-more summary")].filter(b=>b.getClientRects().length).every(b=>b.getBoundingClientRect().width>=28 && b.getBoundingClientRect().height>=28)'), 'citation hit areas');
+          assert.ok(await evaluate('getComputedStyle(document.querySelector(".digest-timeline-text")).fontSize===getComputedStyle(document.querySelector(".digest-sentence")).fontSize && getComputedStyle(document.querySelector(".digest-timeline-text")).lineHeight===getComputedStyle(document.querySelector(".digest-sentence")).lineHeight'), 'consistent timeline type');
+          await evaluate('document.querySelector(".digest-ref-more summary").click()');
+          const buttons = await evaluate('document.querySelectorAll(".digest-ref button").length');
+          for (let i=0;i<buttons;i++) {
+            await evaluate(`document.querySelectorAll('.digest-ref button')[${i}].focus()`);
+            assert.ok(await evaluate('(()=>{const b=document.activeElement.nextElementSibling.getBoundingClientRect();return b.left>=0 && b.top>=0 && b.right<=innerWidth && b.bottom<=innerHeight;})()'), 'tooltip stays in viewport');
+          }
+          await evaluate('document.activeElement.blur(); window.scrollTo(0,0)');
+        }
+        await screenshot(`r8-${route.split('/')[0]}-${theme}-${width}`);
+      }
+    }
+  }
   setDigests(false);
   await evaluate('location.hash="#/line/fiction-topic"');
   await wait('!!document.querySelector(".digest-fallback")');

@@ -50,7 +50,7 @@ class DigestTests(unittest.TestCase):
         before = {p: p.read_bytes() for p in Path(self.tmp.name).rglob("*") if p.is_file()}
         source = self.source()
         digest = source.for_line("fiction-line-0")
-        self.assertEqual(digest["validation"], {"valid": 4, "total": 4, "dropped": 0})
+        self.assertEqual(digest["validation"], {"valid": 4, "total": 4, "dropped": 0, "warnings": 0})
         self.assertEqual(digest, source.for_line("fiction-line-1"))
         self.assertEqual(digest["merged_title"], "虚构合并综述")
         self.assertEqual(source.for_entity("fiction-garden")["statement_count"], 3)
@@ -59,6 +59,20 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(len(source.home_views(2)), 2)
         self.assertEqual(source.home_views(0), [])
         self.assertEqual(before, {p: p.read_bytes() for p in Path(self.tmp.name).rglob("*") if p.is_file()})
+
+    def test_lint_reports_only_count_and_retains_sentences_and_title(self):
+        merged = json.loads((self.root / 'A_merged.json').read_text(encoding='utf-8'))
+        merged['merged'][0]['title'] = '虚构标的的说明'
+        write(self.root, 'A_merged.json', merged)
+        self.output['sentences'][0]['text'] = '虚构计划了了，是是，在在。'
+        write(self.root, 'B_line1.json', self.output)
+        digest = self.source().for_line('fiction-line-0')
+        self.assertEqual(digest['validation'], {'valid':4, 'total':4, 'dropped':0, 'warnings':4})
+        self.assertEqual(digest['sentences'], self.output['sentences'])
+        self.assertEqual(digest['title'], merged['merged'][0]['title'])
+        self.assertNotIn('doubled_function_character', json.dumps(digest))
+        write(self.root, 'C_entity1.json', self.output)
+        self.assertEqual(self.source().for_entity('fiction-garden')['validation']['warnings'], 3)
 
     def test_missing_broken_and_bad_shapes_fall_back(self):
         for value in (None, [], {}, {"sentences": "bad"}, {"sentences": []}):
@@ -80,7 +94,7 @@ class DigestTests(unittest.TestCase):
         write(self.root, "B_line1.json", self.output)
         with self.assertLogs("atlas.backends.digests", level="INFO") as log:
             digest = self.source().for_line("fiction-line-0")
-        self.assertEqual(digest["validation"], {"valid": 4, "total": 8, "dropped": 4})
+        self.assertEqual(digest["validation"], {"valid": 4, "total": 8, "dropped": 4, "warnings": 0})
         self.assertIn("4/8", " ".join(log.output))
         self.assertNotIn("错误数字", " ".join(log.output))
         for sentence in digest["sentences"]:
@@ -134,7 +148,7 @@ class DigestTests(unittest.TestCase):
             self.output['sentences'][0]['evidence'] = evidence
             write(self.root, 'B_line1.json', self.output)
             digest = self.source().for_line('B_line1')
-            self.assertEqual(digest['validation'], {'valid':3, 'total':4, 'dropped':1})
+            self.assertEqual(digest['validation'], {'valid':3, 'total':4, 'dropped':1, 'warnings':0})
         for sentence in self.output['sentences']:
             sentence['evidence'] = []
         write(self.root, 'B_line1.json', self.output)

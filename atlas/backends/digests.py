@@ -7,7 +7,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from experiments.digest.validate import normalize_sentence, validate_digest
+from experiments.digest.validate import lint_digest, normalize_sentence, validate_digest
 from ..tasks.validate import check_schema
 from ..web_data import connect
 
@@ -68,6 +68,7 @@ class DigestSource:
                 if digest:
                     digest.update(title=group["title"], merged_title=group["title"], member_line_ids=ids,
                                   source={"route": "line", "id": ids[0], "title": group["title"]})
+                    digest["validation"]["warnings"] = len(lint_digest(digest))
                     self._merged[f"B_line{k}"] = digest
                     for lid in ids:
                         self._lines[lid] = digest
@@ -87,6 +88,7 @@ class DigestSource:
             digest = self._read(output.stem, "statements", allowed, inp)
             if digest:
                 digest.update(title=node["name"], source={"route": "entity", "id": node["node_id"], "title": node["name"]})
+                digest["validation"]["warnings"] = len(lint_digest(digest))
                 # Multiple outputs targeting one node are ambiguous, not last-write-wins.
                 if node["node_id"] in self._entities:
                     LOG.info("Duplicate entity digests ignored")

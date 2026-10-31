@@ -92,3 +92,25 @@ def test_merge_malformed_members_and_empty_graph():
         assert v.validate_merge(out, ['fiction-line'])
     assert not v.validate_merge({'merged':[]}, [])
     assert v.validate_merge({'merged':[{'member_line_ids':['fiction-line','fiction-line']}]}, ['fiction-line'])
+
+
+def test_doubled_function_characters_warn_without_failing_or_rewriting():
+    import copy
+    d = good()
+    d['title'] = '虚构标的的说明'
+    d['sentences'][0]['text'] = '虚构计划了了，是是，在在，的的的。'
+    before = copy.deepcopy(d)
+    warnings = v.lint_digest(d)
+    assert len(warnings) == 5
+    assert warnings[0] == {'field':'title', 'offset':3, 'code':'doubled_function_character'}
+    assert all(w['field'] == 'sentences[0].text' for w in warnings[1:])
+    errs, per = v.validate_digest(d, DOCS)
+    assert errs == [] and all(ok for _, ok, _ in per)
+    assert d == before
+
+
+def test_lint_ignores_quotes_normal_repetition_and_malformed_fields():
+    for out in (None, [], {}, {'title':None, 'sentences':[None, {}, {'text':3}]},
+                {'title':'看看虚构花圃', 'sentences':[{'text':'计划是在花圃的边上',
+                    'evidence':[{'quote':'的的了了是是在在'}]}]}):
+        assert v.lint_digest(out) == []
