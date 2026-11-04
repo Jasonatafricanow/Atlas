@@ -46,13 +46,13 @@ class Handler(BaseHTTPRequestHandler):
                     from .backends.mrmem_reader import MrMemReader
                     reader = MrMemReader(self.server.data_dir, self.server.mrmem_user, self.server.mrmem_search)
                     route = url.path[5:]
-                    methods = {"search": reader.search, "detail": reader.detail, "evidence": reader.evidence}
+                    methods = {"search": reader.search, "detail": reader.detail, "evidence": reader.evidence, "toc": reader.overview, "home": reader.overview, "lines": reader.overview, "line": reader.detail, "entities": reader.unavailable, "entity": reader.unavailable}
                     result = methods[route](params)
                     return self.reply(200, json.dumps(result, ensure_ascii=False).encode())
                 backend = self.server.backend_factory(self.server.data_dir, params.get("sensitive") == "1")
                 result = dispatch(backend, url.path[5:], params)
                 return self.reply(200, json.dumps(result, ensure_ascii=False).encode())
-            path = ("mrmem.html" if self.server.mrmem_user else "app.html") if url.path == "/" else url.path.lstrip("/")
+            path = "app.html" if url.path == "/" else url.path.lstrip("/")
             if path not in self.server.assets:
                 return self.error(404)
             asset = WEB / path

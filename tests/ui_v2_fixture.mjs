@@ -35,10 +35,12 @@ export async function previewServer({mrmem = false} = {}) {
         const route = url.pathname.slice(5);
         requests.push({route,params:Object.fromEntries(url.searchParams)});
         if (mrmem) {
-          const data = {
+          const overview = {backend:'mrmem',memory_count:1,segment_count:1,lines:[],nodes:[],items:[{id:'fiction-sb',text:'虚构园丁决定先做小规模试种。',ts:null}],segments:[{summary:'虚构园丁在试种后继续记录效果。',last_seq:4,member_ids:['fiction-sb']}]};
+          const detail = {id:'fiction-sb',text:'虚构园丁决定先做小规模试种。',ts:null,segments:overview.segments,evidence:[{fingerprint:'fiction-fingerprint'}]};
+          const data = {home:overview,toc:overview,lines:overview,line:detail,entities:{message:'当前 MR-Mem 尚无实体接口'},entity:{message:'当前 MR-Mem 尚无实体接口'},
             search:{search_mode:'mrmem_runtime',items:[{id:'line:fiction-sb',text:'虚构花圃：先试种，再观察雨水收集的效果。',memory_ids:['fiction-sb']}]},
             detail:{id:'fiction-sb',text:'虚构园丁决定先做小规模试种。',ts:null,segments:[{summary:'虚构园丁在试种后继续记录效果，扩大规模的结果仍未知。',last_seq:4,member_ids:['fiction-sb']}],evidence:[{fingerprint:'fiction-fingerprint'}]},
-            evidence:{quote:'这里是完全虚构的花圃原文，仅用于动效验收。',role:'user',ts:null},
+            evidence:{verification:'source_fingerprint_matched',quote:'这里是完全虚构的花圃原文，仅用于动效验收。',role:'user',ts:null},
           }[route];
           res.setHeader('Content-Type','application/json; charset=utf-8');
           res.end(JSON.stringify(data)); return;
@@ -49,7 +51,7 @@ export async function previewServer({mrmem = false} = {}) {
         if (!showDigests && route === 'entity') delete data.digest;
         res.setHeader('Content-Type','application/json; charset=utf-8'); res.end(JSON.stringify(data));
       } else {
-        const path = url.pathname === '/' ? (mrmem ? '/mrmem.html' : '/app.html') : url.pathname;
+        const path = url.pathname === '/' ? '/app.html' : url.pathname;
         if (!/^\/(?:app\.html|mrmem\.html|mrmem\.css|theme\.css|js\/[\w/-]+\.js)$/.test(path)) {res.writeHead(404).end();return;}
         const content = await readFile(new URL(`../web${path}`,import.meta.url));
         res.setHeader('Content-Type',path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'text/html; charset=utf-8');res.end(content);

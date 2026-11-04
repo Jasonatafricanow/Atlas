@@ -42,7 +42,7 @@ test('MR-Mem browser: motion, keyboard, immediate evidence clearing and reduced 
 
   await call('Runtime.enable'); await call('Page.enable');
   await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
-  await call('Page.navigate',{url});
+  await call('Page.navigate',{url:url+'/mrmem.html'});
   await wait('!!globalThis.AtlasMotion');
   await evaluate("document.getElementById('query').value='虚构'; document.getElementById('find').requestSubmit()");
   await wait('!!document.querySelector("#results article button")');

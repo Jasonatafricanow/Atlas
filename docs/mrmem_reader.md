@@ -9,7 +9,7 @@ python -m atlas serve --backend mrmem --data-dir <directory> --user-id <user> --
 
 目录须包含 `memory.sqlite` 和 `aml_source.sqlite`，无需 ATLAS graph.sqlite。
 打开首页后搜索语义文本，选择 SB 查看关联成熟段版本，再点击原文证据。
-此入口是独立阅读投影，不将原生 Line 转换为主题判断线。
+当前启动直接进入原有完整 ATLAS 界面，复用侧栏、概览卡片、主题、搜索及证据抽屉；不将原生 Line 转换为主题判断线。
 
 搜索调用已有 MR-Mem 服务的 `/search`，最多 100 条，保留其原生读出与排名。
 BM25、向量、融合与 Path A 策略由服务端配置决定；Atlas 不重实现排序，服务故障
@@ -33,6 +33,7 @@ time_given 为假时消息时间显示未知，不显示内部排序占位时间
 
 实体、画像、立场、对错统计、主题归并暂不由此入口生成。
 
-这是独立的第一阶段阅读入口，未实现旧 `MrMemBackend` 的主题判断线合同；
-旧 UI v2 的骨架说明仍描述原有八方法适配器。新入口使用 search/detail/evidence
-三个路由，不把缺少的实体或命题能力伪装成已完成。
+MR-Mem 模式通过 toc/home/lines/line/entities/entity/search/evidence 提供完整界面的读取投影。
+“判断线”导航按后端能力改为“记忆过程”；未提供的实体与画像接口展示明确空状态。
+敏感分类过滤尚无原生合同，因此该开关禁用并说明原因，不能声称已过滤敏感内容。
+旧 mrmem.html 保留为历史独立入口，不再是 --backend mrmem 的默认首页。

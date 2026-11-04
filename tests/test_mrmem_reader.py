@@ -80,8 +80,8 @@ class ReaderTests(unittest.TestCase):
                               '/api/evidence?id=m&index=0&fingerprint='+self.fp):
                     with urllib.request.urlopen(base+route) as response:
                         self.assertEqual(response.status,200)
-                with self.assertRaises(Exception):
-                    urllib.request.urlopen(base+'/api/home')
+                with urllib.request.urlopen(base+'/api/home') as response:
+                    self.assertEqual(json.load(response)['backend'],'mrmem')
             finally:
                 server.shutdown()
                 thread.join()
@@ -107,3 +107,16 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(data['search_mode'],'mrmem_runtime')
         self.assertEqual([i['memory_ids'] for i in data['items']],[['m'],['m']])
         self.assertEqual([i['score'] for i in data['items']],[0.7,0.2])
+
+    def test_overview_has_scoped_records_and_invalidates_segments(self):
+        with database(self.root / 'aml_source.sqlite') as db:
+            db.execute('INSERT INTO threads VALUES(?,?,?,?)',('fiction-user','t','fiction summary',2))
+            db.execute('INSERT INTO thread_members VALUES(?,?,?)',('fiction-user','t','m'))
+        overview=self.reader.overview({})
+        self.assertEqual(overview['memory_count'],1)
+        self.assertEqual(overview['segment_count'],1)
+        self.assertIsNone(overview['items'][0]['ts'])
+        self.assertEqual(MrMemReader(self.root,'other').overview({})['memory_count'],0)
+        with database(self.root / 'aml_source.sqlite') as db:
+            db.execute("UPDATE messages SET content='changed'")
+        self.assertEqual(self.reader.overview({})['segment_count'],0)

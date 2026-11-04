@@ -2,6 +2,7 @@ import {read} from './db.js';
 import {renderGraph} from './graph.js';
 import {mountTimeline} from './timeline.js';
 import * as views from './views.js';
+import * as mrmem from './mrmem_views.js';
 
 const main = document.getElementById('content');
 const drawer = document.getElementById('evidence');
@@ -13,6 +14,7 @@ let destroyGraph = () => {};
 let destroyTimeline = () => {};
 let pageVersion = 0, drawerVersion = 0, searchVersion = 0;
 let searchSelection = -1;
+let backendMode = "atlas";
 const sensitive = () => document.getElementById('sensitive').checked ? '1' : '0';
 const errorView = error => `<div class="empty" role="alert">${views.esc(error.message)} <button data-retry>重试</button></div>`;
 
@@ -66,11 +68,12 @@ async function openEvidence(button) {
   drawer.showModal();
   try {
     const params = {kind: button.dataset.kind, id: button.dataset.id, sensitive: sensitive()};
-    if (button.dataset.kind.startsWith('digest_')) {
+    if (button.dataset.kind === 'mrmem') { params.index = button.dataset.index; params.fingerprint = button.dataset.fingerprint; }
+    else if (button.dataset.kind.startsWith('digest_')) {
       params.doc_id = button.dataset.docId; params.quote = button.dataset.quote;
     } else { params.index = button.dataset.index; params.field = button.dataset.field; }
     const data = await read('evidence', params, evidenceRequest.signal);
-    if (version === drawerVersion && drawer.open) drawerBody.innerHTML = views.evidenceView(data);
+    if (version === drawerVersion && drawer.open) drawerBody.innerHTML = data.verification ? mrmem.evidence(data) : views.evidenceView(data);
   } catch (error) {
     if (error.name !== 'AbortError' && version === drawerVersion && drawer.open) drawerBody.innerHTML = `<p role="alert">${views.esc(error.message)}</p>`;
   }
@@ -105,7 +108,7 @@ async function route() {
   const pages = {home: ['概览', views.homeView], lines: ['判断线', views.linesView], line: ['判断线', views.lineView], entities: ['实体', views.entitiesView], entity: ['实体', views.entityView]};
   if (!pages[page]) { main.innerHTML = views.empty('页面不存在，请从左侧目录选择。'); return; }
   const [caption, render] = pages[page];
-  document.getElementById('crumb').textContent = caption;
+  document.getElementById('crumb').textContent = backendMode === 'mrmem' && ['line','lines'].includes(page) ? '记忆过程' : caption;
   document.title = `${caption} · ATLAS`;
   document.querySelectorAll('.primary a').forEach(a => {
     const active = a.hash === '#/' + (page === 'line' ? 'lines' : page === 'entity' ? 'entities' : page);
@@ -118,12 +121,18 @@ async function route() {
       read('toc', {sensitive: sensitive()}, pageRequest.signal),
     ]);
     if (version !== pageVersion) return;
-    main.innerHTML = render(data);
+    backendMode = toc.backend || "atlas";
+    mrmem.configureShell(backendMode);
+    if (backendMode === "mrmem" && ["line","lines"].includes(page)) {
+      document.getElementById("crumb").textContent = "记忆过程";
+      document.title = "记忆过程 · ATLAS";
+    }
+    main.innerHTML = backendMode === "mrmem" ? mrmem.render(page, data) : render(data);
     globalThis.AtlasMotion?.enter(main);
-    document.getElementById('toc').innerHTML = views.tocView(toc);
+    document.getElementById('toc').innerHTML = backendMode === 'mrmem' ? mrmem.toc(toc) : views.tocView(toc);
     document.getElementById('toc').classList?.toggle('long', toc.lines.length > 12);
-    if (page === 'line') destroyTimeline = mountTimeline(main);
-    if (page === 'entity') {
+    if (page === 'line' && backendMode !== 'mrmem') destroyTimeline = mountTimeline(main);
+    if (page === 'entity' && backendMode !== 'mrmem') {
       const folded = main.querySelector('.digest-evidence');
       let dispose = () => {}, mounted = false;
       const mount = () => {
@@ -159,7 +168,7 @@ search.addEventListener('input', () => {
     try {
       const data = await read('search', {q: query, sensitive: sensitive()}, searchRequest.signal);
       if (version === searchVersion) {
-        results.innerHTML = views.searchView(data, query);
+        results.innerHTML = data.search_mode === 'mrmem_runtime' ? mrmem.search(data, query) : views.searchView(data, query);
         globalThis.AtlasMotion?.enter(results);
       }
     } catch (error) {

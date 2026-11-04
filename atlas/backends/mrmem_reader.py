@@ -142,3 +142,25 @@ class MrMemReader:
         return {"ref": self.pointer(ref), "quote": row["content"], "role": row["role"],
                 "ts": row["occurred_at"] if row["time_given"] else None,
                 "verification": "source_fingerprint_matched"}
+
+    def unavailable(self, params):
+        return {"backend":"mrmem", "message":"当前 MR-Mem 阅读合同未提供实体图谱与画像接口。记忆过程、原生搜索和来源证据可从左侧访问。"}
+
+    def overview(self, params):
+        items = []
+        for memory in self.memories().values():
+            try:
+                items.append(self.item(memory))
+            except (KeyError, ValueError):
+                continue
+        items.sort(key=lambda x: (x["ts"] is None, x["ts"] or "", x["id"]))
+        visible = {m["id"] for m in items}
+        with closing(self.connect("aml_source.sqlite")) as db:
+            members = {}
+            for row in db.execute("SELECT thread_id,memory_id FROM thread_members WHERE user_id=?", (self.user_id,)):
+                members.setdefault(row[0], []).append(row[1])
+            segments = [dict(row, member_ids=members.get(row["thread_id"], [])) for row in db.execute(
+                "SELECT thread_id,summary,last_seq FROM threads WHERE user_id=? AND summary<>'' ORDER BY last_seq DESC", (self.user_id,))]
+        segments = [s for s in segments if s["member_ids"] and set(s["member_ids"]) <= visible]
+        return {"backend":"mrmem", "items":items[:100], "segments":segments[:100],
+                "memory_count":len(items), "segment_count":len(segments), "lines":[], "nodes":[]}
