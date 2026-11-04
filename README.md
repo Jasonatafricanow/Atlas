@@ -1,5 +1,11 @@
 # ATLAS core
 
+MR-Mem AML stores can be opened through the separate, read-only
+[MR-Mem reader](docs/mrmem_reader.md):
+`python -m atlas serve --backend mrmem --data-dir <directory> --user-id <user>`.
+This first slice provides literal semantic-text search, source-backed memory
+details, stored segment versions and verified whole-message evidence.
+
 A **data-free** framework for turning a personal text corpus into browsable "lenses"
 (judgment lines, timelines, correctable claim lists...). This repository contains
 **no personal data and no default data paths**. Your corpus, private adapters,

@@ -1,0 +1,9 @@
+main { max-width: 960px; margin: 40px auto; padding: 24px; }
+form { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+input { flex: 1; min-width: 160px; padding: 12px; }
+button { padding: 10px 14px; margin: 4px; cursor: pointer; white-space: normal; text-align: left; }
+#results { display: grid; gap: 8px; margin: 24px 0; }
+#detail { line-height: 1.75; overflow-wrap: anywhere; }
+dialog { max-width: min(760px, 90vw); max-height: 80vh; padding: 24px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; }
+button:focus-visible, input:focus-visible { outline: 3px solid #a86c25; outline-offset: 3px; }

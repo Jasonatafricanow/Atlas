@@ -42,10 +42,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if url.path.startswith("/api/"):
                 params = {k: v[-1] for k, v in parse_qs(url.query).items()}
+                if self.server.mrmem_user:
+                    from .backends.mrmem_reader import MrMemReader
+                    reader = MrMemReader(self.server.data_dir, self.server.mrmem_user)
+                    route = url.path[5:]
+                    methods = {"search": reader.search, "detail": reader.detail, "evidence": reader.evidence}
+                    result = methods[route](params)
+                    return self.reply(200, json.dumps(result, ensure_ascii=False).encode())
                 backend = self.server.backend_factory(self.server.data_dir, params.get("sensitive") == "1")
                 result = dispatch(backend, url.path[5:], params)
                 return self.reply(200, json.dumps(result, ensure_ascii=False).encode())
-            path = "app.html" if url.path == "/" else url.path.lstrip("/")
+            path = ("mrmem.html" if self.server.mrmem_user else "app.html") if url.path == "/" else url.path.lstrip("/")
             if path not in self.server.assets:
                 return self.error(404)
             asset = WEB / path
@@ -64,22 +71,28 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_POST
 
 
-def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend, digest_dir=None):
+def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend, digest_dir=None, mrmem_user=None):
     if host not in ("127.0.0.1", "localhost"):
         raise ValueError("serve binds to loopback only")
-    if not data_dir or not (Path(data_dir) / "graph.sqlite").is_file():
+    if mrmem_user:
+        from .backends.mrmem_reader import MrMemReader
+        MrMemReader(data_dir, mrmem_user)
+        if digest_dir:
+            raise ValueError("MR-Mem reader does not consume ATLAS digest files")
+    elif not data_dir or not (Path(data_dir) / "graph.sqlite").is_file():
         raise ValueError("serve requires an existing graph.sqlite in an explicit data directory")
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.data_dir = Path(data_dir).resolve()
+    server.mrmem_user = mrmem_user
     server.backend_factory = partial(backend_factory, digest_dir=digest_dir) if digest_dir else backend_factory
-    server.assets = {"app.html", "theme.css"} | {
+    server.assets = {"app.html", "mrmem.html", "mrmem.css", "theme.css"} | {
         p.relative_to(WEB).as_posix() for p in (WEB / "js").rglob("*.js")
         if p.resolve().is_relative_to(WEB)}
     return server
 
 
-def serve(data_dir, host="127.0.0.1", port=8765, *, digest_dir=None):
-    with create_server(data_dir, host, port, digest_dir=digest_dir) as server:
+def serve(data_dir, host="127.0.0.1", port=8765, *, digest_dir=None, mrmem_user=None):
+    with create_server(data_dir, host, port, digest_dir=digest_dir, mrmem_user=mrmem_user) as server:
         print(f"ATLAS: http://127.0.0.1:{server.server_port}", flush=True)
         try:
             server.serve_forever()

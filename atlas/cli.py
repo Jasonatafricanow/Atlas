@@ -61,6 +61,8 @@ def main(argv=None):
         commands.add_parser(name).add_argument("--data-dir", required=True)
     server = commands.add_parser("serve", help="read-only local UI")
     server.add_argument("--data-dir", required=True)
+    server.add_argument("--backend", choices=("atlas", "mrmem"), default="atlas")
+    server.add_argument("--user-id", help="required scope for MR-Mem reading")
     server.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost"))
     server.add_argument("--port", type=int, default=8765)
     server.add_argument("--digest-dir", help="optional read-only digest output directory")
@@ -124,6 +126,12 @@ def main(argv=None):
             from .server import serve
             digest_dir = a.digest_dir or (C.load_digest_dir(a.config) if a.config else None)
             options = {"digest_dir": digest_dir} if digest_dir else {}
+            if a.backend == "mrmem":
+                if not a.user_id or not a.user_id.strip():
+                    raise ValueError("--backend mrmem requires --user-id")
+                options["mrmem_user"] = a.user_id
+            elif a.user_id:
+                raise ValueError("--user-id requires --backend mrmem")
             serve(a.data_dir, a.host, a.port, **options)
             return 0
         if a.cmd in ("tasks", "graph", "profile"):
