@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原文册</title>
+<link rel="stylesheet" href="/folio.css">
+</head>
+<body>
+<p id="fatal" role="alert"></p>
+<header class="top">
+  <div class="brand">
+    <div class="en">Sealed Folio</div>
+    <h1>原文册</h1>
+  </div>
+  <p class="lede">和 AI 共写可以。原文一旦封存，谁也不能改，包括以后的你。</p>
+  <div class="status" id="chainStatus" aria-live="polite">装订中</div>
+  <a href="/">返回认知图谱</a><nav class="nav" aria-label="册子">
+    <button type="button" data-action="toggle-notes" id="btnNotes">笺注开着</button>
+    <button type="button" data-go="#/timeline">时间线</button>
+    <button type="button" data-go="#/trust">信任边界</button>
+    <button type="button" data-go="#/lab">篡改演练</button>
+    <button type="button" data-go="#/new">新的一页</button>
+    <button type="button" data-action="export">导出</button>
+    <button type="button" data-action="import">导入</button>
+    <button type="button" data-action="theme" id="btnTheme">夜读</button>
+  </nav>
+</header>
+<div class="desk">
+  <svg id="leaders" class="leaders" aria-hidden="true"></svg>
+  <aside class="spine" aria-label="书脊">
+    <label class="find"><span>找原文</span><input id="q" type="search" placeholder="原话里的词" autocomplete="off"></label>
+    <div class="filters" id="filters">
+      <button type="button" data-topic="" class="on">全部</button>
+      <button type="button" data-topic="边界">边界</button>
+      <button type="button" data-topic="架构">架构</button>
+      <button type="button" data-topic="剖析">剖析</button>
+    </div>
+    <div class="spine-scroll" id="spineList"></div>
+    <div class="spine-foot" id="spineFoot"></div>
+  </aside>
+  <main class="sheet" id="sheet"></main>
+  <aside class="margin" id="margin"></aside>
+</div>
+<p class="pagefoot" id="foot"></p>
+<div id="modalRoot"></div>
+<script src="/js/folio_ledger.js"></script>
+
+<script src="/js/folio_app.js"></script>
+</body>
+</html>

@@ -61,6 +61,10 @@ def main(argv=None):
         commands.add_parser(name).add_argument("--data-dir", required=True)
     server = commands.add_parser("serve", help="read-only local UI")
     server.add_argument("--data-dir", required=True)
+    server.add_argument("--archive-file", help="explicit legacy fullpass JSON for the original UI")
+    server.add_argument("--folio-file", help="explicit sealed-folio JSON seed")
+    server.add_argument("--state-dir", help="separate writable annotation store")
+    server.add_argument("--runtime-writes", action="store_true", help="enable explicit Add and instance-wide Flush controls")
     server.add_argument("--backend", choices=("atlas", "mrmem"), default="atlas")
     server.add_argument("--user-id", help="required scope for MR-Mem reading")
     server.add_argument("--mrmem-url", help="MR-Mem loopback service root, required for native retrieval")
@@ -137,6 +141,10 @@ def main(argv=None):
                 options.update(mrmem_url=a.mrmem_url, mrmem_token_env=a.mrmem_token_env)
             elif a.user_id:
                 raise ValueError("--user-id requires --backend mrmem")
+            if a.archive_file:
+                options.update(archive_file=a.archive_file,folio_file=a.folio_file,state_dir=a.state_dir,runtime_writes=a.runtime_writes)
+                if a.mrmem_url and a.backend=='atlas':
+                    raise ValueError('native service requires --backend mrmem and an explicit native data directory')
             serve(a.data_dir, a.host, a.port, **options)
             return 0
         if a.cmd in ("tasks", "graph", "profile"):
