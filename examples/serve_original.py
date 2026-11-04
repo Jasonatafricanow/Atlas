@@ -7,10 +7,10 @@ import argparse
 from dataclasses import replace
 import json
 import os
+import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import secrets
-import sys
 import threading
 
 
