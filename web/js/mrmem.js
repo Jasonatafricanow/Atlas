@@ -64,8 +64,19 @@ byId('find').onsubmit = async event => {
     if (token !== version) return;
     byId('status').textContent = `显示 ${data.items.length} 项`;
     for (const item of data.items) {
-      const button = text(byId('results'), 'button', item.text);
-      button.onclick = () => { const selection = ++version; detail(item.id, selection).catch(error); };
+      if (data.search_mode === 'mrmem_runtime') {
+        const article = document.createElement('article');
+        byId('results').append(article);
+        text(article, 'p', item.text);
+        if (!item.memory_ids.length) text(article, 'small', '原生读出 · 暂无可验证 SB 跳转');
+        for (const id of item.memory_ids) {
+          const button = text(article, 'button', '查看 SB 与证据');
+          button.onclick = () => { const selection = ++version; detail(id, selection).catch(error); };
+        }
+      } else {
+        const button = text(byId('results'), 'button', item.text);
+        button.onclick = () => { const selection = ++version; detail(item.id, selection).catch(error); };
+      }
     }
   } catch (e) { error(e); }
 };

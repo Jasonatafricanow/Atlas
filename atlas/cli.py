@@ -63,6 +63,8 @@ def main(argv=None):
     server.add_argument("--data-dir", required=True)
     server.add_argument("--backend", choices=("atlas", "mrmem"), default="atlas")
     server.add_argument("--user-id", help="required scope for MR-Mem reading")
+    server.add_argument("--mrmem-url", help="MR-Mem loopback service root, required for native retrieval")
+    server.add_argument("--mrmem-token-env", help="environment variable containing the service token")
     server.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost"))
     server.add_argument("--port", type=int, default=8765)
     server.add_argument("--digest-dir", help="optional read-only digest output directory")
@@ -130,6 +132,9 @@ def main(argv=None):
                 if not a.user_id or not a.user_id.strip():
                     raise ValueError("--backend mrmem requires --user-id")
                 options["mrmem_user"] = a.user_id
+                if not a.mrmem_url:
+                    raise ValueError('--backend mrmem requires --mrmem-url for native retrieval')
+                options.update(mrmem_url=a.mrmem_url, mrmem_token_env=a.mrmem_token_env)
             elif a.user_id:
                 raise ValueError("--user-id requires --backend mrmem")
             serve(a.data_dir, a.host, a.port, **options)

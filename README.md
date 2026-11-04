@@ -2,8 +2,8 @@
 
 MR-Mem AML stores can be opened through the separate, read-only
 [MR-Mem reader](docs/mrmem_reader.md):
-`python -m atlas serve --backend mrmem --data-dir <directory> --user-id <user>`.
-This first slice provides literal semantic-text search, source-backed memory
+`python -m atlas serve --backend mrmem --data-dir <directory> --user-id <user> --mrmem-url http://127.0.0.1:8000`.
+Search uses the running MR-Mem service's native retrieval and ranking, with source-backed memory
 details, stored segment versions and verified whole-message evidence.
 
 A **data-free** framework for turning a personal text corpus into browsable "lenses"

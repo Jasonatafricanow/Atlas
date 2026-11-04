@@ -52,3 +52,21 @@ test('MR-Mem reader clears open evidence when hidden', async () => {
   assert.equal(p.get('quote').textContent,'');
   assert.equal(p.get('drawer').open,false);
 });
+
+test('native retrieval preserves service ordering and exposes only explicit SB links', async () => {
+  const p = page();
+  const search = p.get('find').onsubmit({preventDefault(){}});
+  p.requests.shift().finish({search_mode:'mrmem_runtime', items:[
+    {id:'line:m2',text:'<native first>',memory_ids:['m2']},
+    {id:'outline',text:'native second',memory_ids:[]}
+  ]});
+  await search;
+  const results = p.get('results').children;
+  assert.equal(results[0].children[0].textContent,'<native first>');
+  assert.equal(results[1].children[0].textContent,'native second');
+  assert.match(results[1].children[1].textContent,/暂无可验证/);
+  results[0].children[1].onclick();
+  assert.match(p.requests[0].url,/id=m2/);
+  p.requests.shift().finish({text:'SB',ts:null,segments:[],evidence:[]});
+  await tick();
+});

@@ -95,3 +95,15 @@ class ReaderTests(unittest.TestCase):
         with database(self.root / 'aml_source.sqlite') as db:
             db.execute('INSERT INTO thread_members VALUES(?,?,?)',('fiction-user','t','missing'))
         self.assertEqual(self.reader.detail({'id':'m'})['segments'],[])
+
+    def test_native_hits_map_without_literal_filter_or_reordering(self):
+        class Service:
+            def search(inner, user, query):
+                self.assertEqual(user,'fiction-user')
+                return [dict(id='line:m',content='native semantic result',score=0.7),
+                        dict(id='raw:r',content='native raw result',score=0.2)]
+        reader = MrMemReader(self.root,'fiction-user',Service())
+        data = reader.search({'q':'not present in any local text'})
+        self.assertEqual(data['search_mode'],'mrmem_runtime')
+        self.assertEqual([i['memory_ids'] for i in data['items']],[['m'],['m']])
+        self.assertEqual([i['score'] for i in data['items']],[0.7,0.2])

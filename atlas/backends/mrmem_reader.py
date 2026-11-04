@@ -11,10 +11,11 @@ from pathlib import Path
 
 
 class MrMemReader:
-    def __init__(self, root, user_id):
+    def __init__(self, root, user_id, search_service=None):
         if not user_id or not user_id.strip():
             raise ValueError("MR-Mem requires an explicit user ID")
         self.root, self.user_id = Path(root), user_id
+        self.search_service = search_service
         for name in ("memory.sqlite", "aml_source.sqlite"):
             if not (self.root / name).is_file():
                 raise ValueError("MR-Mem stores unavailable")
@@ -60,6 +61,37 @@ class MrMemReader:
                 "evidence": [self.pointer(r) for r in refs]}
 
     def search(self, params):
+        if self.search_service is not None:
+            query = params.get('q', '').strip()
+            if not query:
+                return {'items': [], 'search_mode': 'mrmem_runtime', 'limit':100}
+            found = self.search_service.search(self.user_id, query)
+            current = self.memories()
+            items = []
+            for hit in found:
+                identifier = hit['id']
+                ids = [identifier] if identifier in current else []
+                if identifier.startswith('line:') and identifier[5:] in current:
+                    ids = [identifier[5:]]
+                elif identifier.startswith('raw:'):
+                    record = identifier[4:]
+                    ids = [m['memory_id'] for m in current.values() if any(
+                        r.get('record_id') == record for r in m['provenance'].get('source_refs', []))]
+                elif identifier.startswith('thread:'):
+                    with closing(self.connect('aml_source.sqlite')) as db:
+                        ids = [r[0] for r in db.execute(
+                            'SELECT memory_id FROM thread_members WHERE user_id=? AND thread_id=?',
+                            (self.user_id, identifier[7:])) if r[0] in current]
+                linked = []
+                for mid in dict.fromkeys(ids):
+                    try:
+                        self.item(current[mid])
+                    except (KeyError, ValueError):
+                        continue
+                    linked.append(mid)
+                items.append({'id':identifier, 'text':hit['content'], 'score':hit.get('score'),
+                              'ts':hit.get('created_at'), 'memory_ids':linked})
+            return {'items':items, 'search_mode':'mrmem_runtime', 'limit':100}
         query = params.get("q", "").strip().casefold()
         items = []
         for memory in self.memories().values():

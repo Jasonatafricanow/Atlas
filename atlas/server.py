@@ -44,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
                 params = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 if self.server.mrmem_user:
                     from .backends.mrmem_reader import MrMemReader
-                    reader = MrMemReader(self.server.data_dir, self.server.mrmem_user)
+                    reader = MrMemReader(self.server.data_dir, self.server.mrmem_user, self.server.mrmem_search)
                     route = url.path[5:]
                     methods = {"search": reader.search, "detail": reader.detail, "evidence": reader.evidence}
                     result = methods[route](params)
@@ -71,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_POST
 
 
-def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend, digest_dir=None, mrmem_user=None):
+def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=AtlasSqliteBackend, digest_dir=None, mrmem_user=None, mrmem_url=None, mrmem_token_env=None):
     if host not in ("127.0.0.1", "localhost"):
         raise ValueError("serve binds to loopback only")
     if mrmem_user:
@@ -81,9 +81,12 @@ def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=Atla
             raise ValueError("MR-Mem reader does not consume ATLAS digest files")
     elif not data_dir or not (Path(data_dir) / "graph.sqlite").is_file():
         raise ValueError("serve requires an existing graph.sqlite in an explicit data directory")
+    from .backends.mrmem_search import MrMemSearch
+    search_service = MrMemSearch(mrmem_url, mrmem_token_env) if mrmem_url else None
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.data_dir = Path(data_dir).resolve()
     server.mrmem_user = mrmem_user
+    server.mrmem_search = search_service
     server.backend_factory = partial(backend_factory, digest_dir=digest_dir) if digest_dir else backend_factory
     server.assets = {"app.html", "mrmem.html", "mrmem.css", "theme.css"} | {
         p.relative_to(WEB).as_posix() for p in (WEB / "js").rglob("*.js")
@@ -91,8 +94,8 @@ def create_server(data_dir, host="127.0.0.1", port=8765, *, backend_factory=Atla
     return server
 
 
-def serve(data_dir, host="127.0.0.1", port=8765, *, digest_dir=None, mrmem_user=None):
-    with create_server(data_dir, host, port, digest_dir=digest_dir, mrmem_user=mrmem_user) as server:
+def serve(data_dir, host="127.0.0.1", port=8765, *, digest_dir=None, mrmem_user=None, mrmem_url=None, mrmem_token_env=None):
+    with create_server(data_dir, host, port, digest_dir=digest_dir, mrmem_user=mrmem_user, mrmem_url=mrmem_url, mrmem_token_env=mrmem_token_env) as server:
         print(f"ATLAS: http://127.0.0.1:{server.server_port}", flush=True)
         try:
             server.serve_forever()
