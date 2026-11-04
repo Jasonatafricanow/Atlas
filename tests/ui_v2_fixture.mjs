@@ -16,7 +16,7 @@ export const fictionalDigest = (route = 'line') => ({
     {section:'record',text:'扩大规模的结果仍未确定。',outcome:'unknown',evidence:[{doc_id:'fiction-doc',quote:'雨水收集'}]},
   ],
 });
-export async function previewServer() {
+export async function previewServer({mrmem = false} = {}) {
   let showDigests = true;
   const requests = [];
   const node = {node_id:'fiction-topic',name:'虚构花圃的用水计划',type:'topic',evidence:[]};
@@ -34,14 +34,23 @@ export async function previewServer() {
       if (url.pathname.startsWith('/api/')) {
         const route = url.pathname.slice(5);
         requests.push({route,params:Object.fromEntries(url.searchParams)});
+        if (mrmem) {
+          const data = {
+            search:{search_mode:'mrmem_runtime',items:[{id:'line:fiction-sb',text:'虚构花圃：先试种，再观察雨水收集的效果。',memory_ids:['fiction-sb']}]},
+            detail:{id:'fiction-sb',text:'虚构园丁决定先做小规模试种。',ts:null,segments:[{summary:'虚构园丁在试种后继续记录效果，扩大规模的结果仍未知。',last_seq:4,member_ids:['fiction-sb']}],evidence:[{fingerprint:'fiction-fingerprint'}]},
+            evidence:{quote:'这里是完全虚构的花圃原文，仅用于动效验收。',role:'user',ts:null},
+          }[route];
+          res.setHeader('Content-Type','application/json; charset=utf-8');
+          res.end(JSON.stringify(data)); return;
+        }
         const data = {home:{nodes,lines:[line],propositions:props,derived},toc:{nodes,lines:[line]},lines:{nodes,lines:[line]},line:{node,line},entities:{nodes},entity,search:{results:[{line},{node},{proposition:props[0]}]},evidence:{quote:'虚构花圃的雨水收集需要更多试种证据。',before:'本段仅用于离线界面验收。',after:'后续记录继续保留未知，不补写事实。',pointer,ts:null,author:'虚构园丁',derived:{session_display_name:'虚构试种会话'}}}[route];
         if (showDigests && ['line','entity'].includes(route)) data.digest = fictionalDigest(route);
         if (showDigests && route === 'home') data.home_views = fictionalDigest().sentences.filter(s=>s.section !== 'what').map(sentence=>({sentence,source:{...fictionalDigest().source,title:'虚构花圃用水观察与分区试种计划的长期跟进和后续记录'.repeat(4)}}));
         if (!showDigests && route === 'entity') delete data.digest;
         res.setHeader('Content-Type','application/json; charset=utf-8'); res.end(JSON.stringify(data));
       } else {
-        const path = url.pathname === '/' ? '/app.html' : url.pathname;
-        if (!/^\/(?:app\.html|theme\.css|js\/[\w/-]+\.js)$/.test(path)) {res.writeHead(404).end();return;}
+        const path = url.pathname === '/' ? (mrmem ? '/mrmem.html' : '/app.html') : url.pathname;
+        if (!/^\/(?:app\.html|mrmem\.html|mrmem\.css|theme\.css|js\/[\w/-]+\.js)$/.test(path)) {res.writeHead(404).end();return;}
         const content = await readFile(new URL(`../web${path}`,import.meta.url));
         res.setHeader('Content-Type',path.endsWith('.css')?'text/css':path.endsWith('.js')?'text/javascript':'text/html; charset=utf-8');res.end(content);
       }

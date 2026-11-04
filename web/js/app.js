@@ -119,6 +119,7 @@ async function route() {
     ]);
     if (version !== pageVersion) return;
     main.innerHTML = render(data);
+    globalThis.AtlasMotion?.enter(main);
     document.getElementById('toc').innerHTML = views.tocView(toc);
     document.getElementById('toc').classList?.toggle('long', toc.lines.length > 12);
     if (page === 'line') destroyTimeline = mountTimeline(main);
@@ -157,7 +158,10 @@ search.addEventListener('input', () => {
     searchRequest = new AbortController();
     try {
       const data = await read('search', {q: query, sensitive: sensitive()}, searchRequest.signal);
-      if (version === searchVersion) results.innerHTML = views.searchView(data, query);
+      if (version === searchVersion) {
+        results.innerHTML = views.searchView(data, query);
+        globalThis.AtlasMotion?.enter(results);
+      }
     } catch (error) {
       if (error.name !== 'AbortError' && version === searchVersion) results.innerHTML = `<p role="alert">${views.esc(error.message)}</p>`;
     }

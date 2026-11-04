@@ -21,9 +21,17 @@ function text(parent, tag, value) {
 function error(e) { byId('status').textContent = e.message; }
 async function detail(id, selectedVersion) {
   clearEvidence();
-  const data = await api('detail', {id});
-  if (selectedVersion !== version) return;
   const root = byId('detail');
+  globalThis.AtlasMotion?.cancel(root);
+  root.replaceChildren();
+  root.setAttribute?.('aria-busy', 'true');
+  byId('status').textContent = '正在读取 SB…';
+  let data;
+  try { data = await api('detail', {id}); }
+  catch (e) { if (selectedVersion === version) error(e); return; }
+  finally { if (selectedVersion === version) root.setAttribute?.('aria-busy', 'false'); }
+  if (selectedVersion !== version) return;
+  byId('status').textContent = 'SB 已更新';
   root.replaceChildren();
   text(root, 'h2', 'SB');
   text(root, 'p', data.text);
@@ -44,21 +52,29 @@ async function detail(id, selectedVersion) {
     button.onclick = async () => {
       clearEvidence();
       const token = evidenceVersion;
+      byId('status').textContent = '正在读取证据…';
       try {
         const source = await api('evidence', {id,index,fingerprint:ref.fingerprint});
         if (token !== evidenceVersion || selectedVersion !== version) return;
         byId('quote').textContent = `${source.ts || '时间未知'} · ${source.role}\n${source.quote}`;
         byId('drawer').showModal();
-      } catch (e) { error(e); }
+        byId('status').textContent = '证据已打开';
+      } catch (e) { if (token === evidenceVersion && selectedVersion === version) error(e); }
     };
   });
+  globalThis.AtlasMotion?.enter(root, 'detail');
 }
 byId('find').onsubmit = async event => {
   event.preventDefault();
   const token = ++version;
   clearEvidence();
+  globalThis.AtlasMotion?.cancel(byId('detail'));
+  globalThis.AtlasMotion?.cancel(byId('results'));
   byId('detail').replaceChildren();
   byId('results').replaceChildren();
+  byId('results').setAttribute?.('aria-busy', 'true');
+  byId('detail').setAttribute?.('aria-busy', 'false');
+  byId('status').textContent = '正在检索记忆…';
   try {
     const data = await api('search', {q:byId('query').value});
     if (token !== version) return;
@@ -78,8 +94,12 @@ byId('find').onsubmit = async event => {
         button.onclick = () => { const selection = ++version; detail(item.id, selection).catch(error); };
       }
     }
-  } catch (e) { error(e); }
+    globalThis.AtlasMotion?.enter(byId('results'));
+  } catch (e) { if (token === version) error(e); }
+  finally { if (token === version) byId('results').setAttribute?.('aria-busy', 'false'); }
 };
 byId('close').onclick = clearEvidence;
-byId('drawer').addEventListener('close', () => { evidenceVersion++; byId('quote').textContent = ''; });
+byId('drawer').addEventListener('close', () => {
+  if (!byId('drawer').open) { evidenceVersion++; byId('quote').textContent = ''; }
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) clearEvidence(); });
